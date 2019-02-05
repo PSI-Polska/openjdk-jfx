@@ -12,6 +12,7 @@
     <properties>
         <javafx.version>@VERSION@</javafx.version>
     </properties>
+    <url>https://github.com/PSI-Polska/openjdk-jfx/</url>
     <dependencyManagement>
     </dependencyManagement>
     <profiles>

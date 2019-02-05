@@ -331,7 +331,7 @@ public class TreeTableViewSkin<T> extends TableViewSkinBase<T, TreeItem<T>, Tree
     }
 
     /** {@inheritDoc} */
-    @Override void horizontalScroll() {
+    @Override protected void horizontalScroll() {
         super.horizontalScroll();
         if (getSkinnable().getFixedCellSize() > 0) {
             flow.requestCellLayout();

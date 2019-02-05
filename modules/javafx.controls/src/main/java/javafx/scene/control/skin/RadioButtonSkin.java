@@ -72,14 +72,17 @@ public class RadioButtonSkin extends LabeledSkinBase<RadioButton> {
         super(control);
 
         // install default input map for the RadioButton control
-        behavior = new ToggleButtonBehavior<>(control);
+        behavior = createBehavior( control );
 //        control.setInputMap(behavior.getInputMap());
 
         radio = createRadio();
         updateChildren();
     }
 
-
+    protected ToggleButtonBehavior< RadioButton > createBehavior( final RadioButton control )
+    {
+        return new ToggleButtonBehavior<>(control);
+    }
 
     /***************************************************************************
      *                                                                         *

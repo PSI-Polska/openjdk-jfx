@@ -73,7 +73,7 @@ public class CheckBoxSkin extends LabeledSkinBase<CheckBox> {
         super(control);
 
         // install default input map for the CheckBox control
-        behavior = new ButtonBehavior<>(control);
+        behavior = createBehavior( control );
 //        control.setInputMap(behavior.getInputMap());
 
         box.getStyleClass().setAll("box");
@@ -84,7 +84,10 @@ public class CheckBoxSkin extends LabeledSkinBase<CheckBox> {
         updateChildren();
     }
 
-
+    protected ButtonBehavior< CheckBox > createBehavior( final CheckBox control )
+    {
+        return new ButtonBehavior<>(control);
+    }
 
     /***************************************************************************
      *                                                                         *

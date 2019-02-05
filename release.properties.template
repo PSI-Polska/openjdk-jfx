@@ -1,0 +1,4 @@
+build.release=false
+repository.url=https://oss.sonatype.org/service/local/staging/deploy/maven2/
+repository.username=admin
+repository.password=admin

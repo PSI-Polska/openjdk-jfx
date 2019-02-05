@@ -314,7 +314,7 @@ public class TableHeaderRow extends StackPane {
     private final ReadOnlyObjectProperty<NestedTableColumnHeader> rootHeaderProperty() {
         return rootHeader.getReadOnlyProperty();
     }
-    final NestedTableColumnHeader getRootHeader() {
+    protected final NestedTableColumnHeader getRootHeader() {
         return rootHeader.get();
     }
     private final void setRootHeader(NestedTableColumnHeader value) {
@@ -378,9 +378,14 @@ public class TableHeaderRow extends StackPane {
         return snappedTopInset() + headerPrefHeight + snappedBottomInset();
     }
 
+    protected final TableViewSkinBase< ?, ?, ?, ?, ? > getTableSkin()
+    {
+        return tableSkin;
+    }
+
     // used to be protected to allow subclasses to modify the horizontal scrolling,
     // but made private again for JDK 9
-    void updateScrollX() {
+    protected void updateScrollX() {
         scrollX = flow.getHbar().isVisible() ? -flow.getHbar().getValue() : 0.0F;
         requestLayout();
 
@@ -392,7 +397,7 @@ public class TableHeaderRow extends StackPane {
 
     // used to be protected to allow subclass to customise the width, to allow for features
     // such as row headers, but made private again for JDK 9
-    private void updateTableWidth() {
+    protected void updateTableWidth() {
         // snapping added for RT-19428
         final Control c = tableSkin.getSkinnable();
         if (c == null) {
@@ -413,7 +418,7 @@ public class TableHeaderRow extends StackPane {
      * @return A new NestedTableColumnHeader instance.
      */
     protected NestedTableColumnHeader createRootHeader() {
-        return new NestedTableColumnHeader(null);
+        return new NestedTableColumnHeader(tableSkin, null);
     }
 
 
@@ -440,11 +445,11 @@ public class TableHeaderRow extends StackPane {
         }
     }
 
-    void setDragHeaderX(double dragHeaderX) {
+    protected void setDragHeaderX(double dragHeaderX) {
         dragHeader.setTranslateX(dragHeaderX);
     }
 
-    TableColumnHeader getColumnHeaderFor(final TableColumnBase<?,?> col) {
+    protected final TableColumnHeader getColumnHeaderFor(final TableColumnBase<?,?> col) {
         if (col == null) return null;
         List<TableColumnBase<?,?>> columnChain = new ArrayList<>();
         columnChain.add(col);
