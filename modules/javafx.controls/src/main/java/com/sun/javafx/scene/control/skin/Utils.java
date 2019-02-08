@@ -724,7 +724,11 @@ public class Utils {
     public static void removeMnemonics(ContextMenu popup, Scene scene) {
 
         if (!com.sun.javafx.PlatformUtil.isMac()) {
-
+            if( popup.getSkin() == null )
+            {
+                // popup's skin was disposed by MenuButtonSkinBase#dispose()
+                return;
+            }
             ContextMenuContent cmContent = (ContextMenuContent)popup.getSkin().getNode();
             MenuItem menuitem;
 

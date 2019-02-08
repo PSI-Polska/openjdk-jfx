@@ -34,6 +34,7 @@ import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -175,8 +176,10 @@ public class MenuButtonSkinBase<C extends MenuButton> extends SkinBase<C> {
                 getSkinnable().hide();
             }
 
-            if (popup.isShowing()) {
-                Utils.addMnemonics(popup, getSkinnable().getScene(), NodeHelper.isShowMnemonics(getSkinnable()));
+            final Scene scene = getSkinnable().getScene();
+            final ContextMenu popup = this.popup;
+            if ( popup.isShowing()) {
+                Utils.addMnemonics( popup, scene, NodeHelper.isShowMnemonics(getSkinnable()));
             } else {
                 // we wrap this in a runLater so that mnemonics are not removed
                 // before all key events are fired (because KEY_PRESSED might have
@@ -185,7 +188,7 @@ public class MenuButtonSkinBase<C extends MenuButton> extends SkinBase<C> {
                 // through the mnemonics code (especially in case they should be
                 // consumed to prevent them being used elsewhere).
                 // See JBS-8090026 for more detail.
-                Platform.runLater(() -> Utils.removeMnemonics(popup, getSkinnable().getScene()));
+                Platform.runLater(() -> Utils.removeMnemonics( popup, scene) ); // Fixing NPE if menu structure changed before popup is closed
             }
         });
     }
