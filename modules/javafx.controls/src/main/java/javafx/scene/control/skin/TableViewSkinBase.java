@@ -524,10 +524,7 @@ public abstract class TableViewSkinBase<M, S, C extends Control, I extends Index
         return TableSkinUtils.placeholderProperty( this );
     }
 
-    /**
-     * FIXME: To be considered if this should be public or protected!
-     */
-    public final TableHeaderRow getTableHeaderRow() {
+    protected final TableHeaderRow getTableHeaderRow() {
         return tableHeaderRow;
     }
 
@@ -659,6 +656,10 @@ public abstract class TableViewSkinBase<M, S, C extends Control, I extends Index
 
     protected final Region getColumnReorderLine() {
         return columnReorderLine;
+    }
+
+    protected final Region getColumnReorderOverlay() {
+        return columnReorderOverlay;
     }
 
     /**

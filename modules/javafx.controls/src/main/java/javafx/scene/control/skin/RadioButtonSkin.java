@@ -51,7 +51,7 @@ public class RadioButtonSkin extends LabeledSkinBase<RadioButton> {
 
     /** The radio contains the "dot", which is usually a circle */
     private StackPane radio;
-    private final BehaviorBase<RadioButton> behavior;
+    private final ToggleButtonBehavior< ? extends RadioButton > behavior;
 
 
 
@@ -79,7 +79,7 @@ public class RadioButtonSkin extends LabeledSkinBase<RadioButton> {
         updateChildren();
     }
 
-    protected ToggleButtonBehavior< RadioButton > createBehavior( final RadioButton control )
+    protected ToggleButtonBehavior< ? extends RadioButton > createBehavior( final RadioButton control )
     {
         return new ToggleButtonBehavior<>(control);
     }

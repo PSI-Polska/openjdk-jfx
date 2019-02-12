@@ -25,6 +25,17 @@
 
 package javafx.scene.control.skin;
 
+import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.getSortTypeName;
+import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.getSortTypeProperty;
+import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.isAscending;
+import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.isDescending;
+import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.setSortType;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
 import com.sun.javafx.scene.control.LambdaMultiplePropertyChangeListenerHandler;
 import com.sun.javafx.scene.control.Properties;
 import com.sun.javafx.scene.control.TableColumnBaseHelper;
@@ -40,6 +51,7 @@ import javafx.css.PseudoClass;
 import javafx.css.Styleable;
 import javafx.css.StyleableDoubleProperty;
 import javafx.css.StyleableProperty;
+import javafx.css.converter.SizeConverter;
 import javafx.event.EventHandler;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
@@ -58,19 +70,6 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-
-import javafx.css.converter.SizeConverter;
-
-import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.getSortTypeName;
-import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.getSortTypeProperty;
-import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.isAscending;
-import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.isDescending;
-import static com.sun.javafx.scene.control.TableColumnSortTypeWrapper.setSortType;
 
 
 /**
@@ -377,17 +376,33 @@ public class TableColumnHeader extends Region {
             sortWidth = sortArrow.prefWidth(-1);
             x -= sortWidth;
             sortArrow.resize(sortWidth, sortArrow.prefHeight(-1));
-            positionInArea(sortArrow, x, snappedTopInset(),
-                    sortWidth, h, 0, HPos.CENTER, VPos.CENTER);
+            positionSortArrow( x, sortWidth, h );
         }
 
         if (label != null) {
-            double labelWidth = w - sortWidth;
-            label.resizeRelocate(snappedLeftInset(), 0, labelWidth, getHeight());
+            layoutLabel( snappedLeftInset(), 0, w - sortWidth, getHeight() );
         }
     }
 
-    /** {@inheritDoc} */
+    protected final Label getLabel()
+    {
+        return label;
+    }
+
+    protected void positionSortArrow( final double aX, final double aSortWidth, final double aH )
+    {
+        positionInArea( sortArrow, aX, snappedTopInset(), aSortWidth, aH, 0, HPos.CENTER, VPos.CENTER );
+    }
+
+    protected void layoutLabel( final double x, final double y, final double labelWidth,
+        final double labelHeight )
+    {
+        label.resizeRelocate( x, y, labelWidth, labelHeight );
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override protected double computePrefWidth(double height) {
         if (getNestedColumnHeader() != null) {
             double width = getNestedColumnHeader().prefWidth(height);

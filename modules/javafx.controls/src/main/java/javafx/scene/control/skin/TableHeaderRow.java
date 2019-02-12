@@ -291,13 +291,13 @@ public class TableHeaderRow extends StackPane {
             dragHeader.setVisible(isReordering());
         }
     };
-    final void setReordering(boolean value) {
+    protected final void setReordering(boolean value) {
         this.reordering.set(value);
     }
-    final boolean isReordering() {
+    protected final boolean isReordering() {
         return reordering.get();
     }
-    final BooleanProperty reorderingProperty() {
+    protected final BooleanProperty reorderingProperty() {
         return reordering;
     }
 
@@ -322,12 +322,6 @@ public class TableHeaderRow extends StackPane {
     }
 
 
-
-    /***************************************************************************
-     *                                                                         *
-     * Public API                                                              *
-     *                                                                         *
-     **************************************************************************/
 
     /** {@inheritDoc} */
     @Override protected void layoutChildren() {
@@ -357,6 +351,17 @@ public class TableHeaderRow extends StackPane {
 
         // position the top-right rectangle (which sits above the scrollbar)
         cornerRegion.resizeRelocate(tableWidth - cornerWidth, snappedTopInset(), cornerWidth, prefHeight);
+    }
+
+    /***************************************************************************
+     *                                                                         *
+     * Public API                                                              *
+     *                                                                         *
+     **************************************************************************/
+
+    protected final StackPane getDragHeader()
+    {
+        return dragHeader;
     }
 
     /** {@inheritDoc} */

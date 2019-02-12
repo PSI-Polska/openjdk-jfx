@@ -1738,11 +1738,16 @@ public class VirtualFlow<T extends IndexedCell> extends Region {
      *                                                                         *
      **************************************************************************/
 
-    final VirtualScrollBar getHbar() {
+    protected final VirtualScrollBar getHbar() {
         return hbar;
     }
-    final VirtualScrollBar getVbar() {
+    protected final VirtualScrollBar getVbar() {
         return vbar;
+    }
+
+    protected final ClippedContainer getClipView()
+    {
+        return clipView;
     }
 
     /**
@@ -2778,7 +2783,7 @@ public class VirtualFlow<T extends IndexedCell> extends Region {
      * A simple extension to Region that ensures that anything wanting to flow
      * outside of the bounds of the Region is clipped.
      */
-    static class ClippedContainer extends Region {
+    protected static class ClippedContainer extends Region {
 
         /**
          * The Node which is embedded within this {@code ClipView}.

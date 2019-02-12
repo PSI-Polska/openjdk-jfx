@@ -39,7 +39,6 @@ import javafx.geometry.VPos;
 import javafx.scene.AccessibleAttribute;
 import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Accordion;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Control;
 import javafx.scene.control.Label;
@@ -310,7 +309,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         boolean emptyText = string == null || string.isEmpty();
         double widthPadding = leftInset + rightInset;
 
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding()) {
             widthPadding += leftLabelPadding() + rightLabelPadding();
         }
 
@@ -350,7 +349,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
 
         width -= leftInset + rightInset;
 
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding()) {
             width -= leftLabelPadding() + rightLabelPadding();
         }
 
@@ -384,7 +383,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
 
         double padding = topInset + bottomInset;
 
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding()) {
             padding += topLabelPadding() + bottomLabelPadding();
         }
 
@@ -417,7 +416,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         }
 
         double offset = topInset + h;
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding()) {
             offset += topLabelPadding();
         }
         return offset;
@@ -487,7 +486,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         final boolean ignoreGraphic = isIgnoreGraphic();
         final boolean ignoreText = isIgnoreText();
 
-        if (!ignoreText) {
+        if (!ignoreText || isLayoutWithLabelPadding() ) {
             x += leftLabelPadding();
             y += topLabelPadding();
             w -= leftLabelPadding() + rightLabelPadding();
@@ -719,6 +718,11 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         }
     }
 
+    protected boolean isLayoutWithLabelPadding()
+    {
+        return false;
+    }
+
     /** {@inheritDoc} */
     @Override protected Object queryAccessibleAttribute(AccessibleAttribute attribute, Object... parameters) {
         switch (attribute) {
@@ -815,7 +819,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         }
 
         double padding = leftInset + rightInset;
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding() ) {
             padding += leftLabelPadding() + rightLabelPadding();
         }
 
@@ -853,7 +857,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         }
 
         double padding = topInset + bottomInset;
-        if (!isIgnoreText()) {
+        if (!isIgnoreText() || isLayoutWithLabelPadding() ) {
             padding += topLabelPadding() - bottomLabelPadding();
         }
         return h + padding;
@@ -1060,7 +1064,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
             double availableWidth = labeled.getWidth() -
                     snappedLeftInset() - snappedRightInset();
 
-            if (!isIgnoreText()) {
+            if (!isIgnoreText() || isLayoutWithLabelPadding() ) {
                 availableWidth -= leftLabelPadding() + rightLabelPadding();
             }
             availableWidth = Math.max(availableWidth, 0);
@@ -1083,7 +1087,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
             double availableHeight = labeled.getHeight() -
                     snappedTopInset() - snappedBottomInset();
 
-            if (!isIgnoreText()) {
+            if (!isIgnoreText() || isLayoutWithLabelPadding()) {
                 availableHeight -= topLabelPadding() + bottomLabelPadding();
             }
             availableHeight = Math.max(availableHeight, 0);
