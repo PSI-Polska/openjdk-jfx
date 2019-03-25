@@ -501,7 +501,7 @@ if (IS_MAC) {
 // The following properties should be left alone by developers and set only from Hudson.
 defineProperty("HUDSON_JOB_NAME", "buildjfx")
 defineProperty("HUDSON_BUILD_NUMBER","0000")
-defineProperty("PROMOTED_BUILD_NUMBER", "3")
+defineProperty("PROMOTED_BUILD_NUMBER", "4")
 
 loadProperties("$projectDir/release.properties")
 ext.IS_MILESTONE_FCS = Boolean.parseBoolean( buildRelease )
