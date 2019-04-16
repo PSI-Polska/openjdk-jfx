@@ -504,7 +504,8 @@ defineProperty("HUDSON_BUILD_NUMBER","0000")
 defineProperty("PROMOTED_BUILD_NUMBER", "5")
 
 loadProperties("$projectDir/release.properties")
-ext.IS_MILESTONE_FCS = Boolean.parseBoolean( buildRelease )
+ext.BUILD_ALPHA = Boolean.parseBoolean( buildAlpha )
+ext.IS_MILESTONE_FCS = Boolean.parseBoolean( buildRelease ) || ext.BUILD_ALPHA
 
 // The following properties define the product name for Oracle JDK and OpenJDK
 // for VersionInfo and the DLL manifest.
@@ -542,6 +543,10 @@ def buildDate = new java.util.Date()
 def buildTimestamp = new java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss").format(buildDate)
 defineProperty("BUILD_TIMESTAMP", buildTimestamp)
 def relSuffix = jfxReleaseSuffix
+if( ext.BUILD_ALPHA )
+{
+    relSuffix += "-ALPHA-" + Integer.parseInt( buildAlphaNumber )
+}
 //def relSuffix = ""
 //def relOpt = ""
 //if (HUDSON_JOB_NAME == "not_hudson") {
