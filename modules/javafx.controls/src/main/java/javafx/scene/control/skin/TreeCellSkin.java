@@ -118,7 +118,7 @@ public class TreeCellSkin<T> extends CellSkinBase<TreeCell<T>> {
         super(control);
 
         // install default input map for the TreeCell control
-        behavior = new TreeCellBehavior<>(control);
+        behavior = createBehavior( control );
 //        control.setInputMap(behavior.getInputMap());
 
         updateTreeItem();
@@ -131,6 +131,11 @@ public class TreeCellSkin<T> extends CellSkinBase<TreeCell<T>> {
         registerChangeListener(control.textProperty(), e -> getSkinnable().requestLayout());
 
         setupTreeViewListeners();
+    }
+
+    protected TreeCellBehavior< T > createBehavior( final TreeCell< T > control )
+    {
+        return new TreeCellBehavior<>(control);
     }
 
     private void setupTreeViewListeners() {
