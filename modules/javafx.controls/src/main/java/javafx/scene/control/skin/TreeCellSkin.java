@@ -283,7 +283,7 @@ public class TreeCellSkin<T> extends CellSkinBase<TreeCell<T>> {
     /** {@inheritDoc} */
     @Override protected double computeMinHeight(double width, double topInset, double rightInset, double bottomInset, double leftInset) {
         if (fixedCellSizeEnabled) {
-            return fixedCellSize;
+            return snapSizeY( fixedCellSize );
         }
 
         double pref = super.computeMinHeight(width, topInset, rightInset, bottomInset, leftInset);
@@ -294,7 +294,7 @@ public class TreeCellSkin<T> extends CellSkinBase<TreeCell<T>> {
     /** {@inheritDoc} */
     @Override protected double computePrefHeight(double width, double topInset, double rightInset, double bottomInset, double leftInset) {
         if (fixedCellSizeEnabled) {
-            return fixedCellSize;
+            return snapSizeY( fixedCellSize );
         }
 
         final TreeCell<T> cell = getSkinnable();
@@ -311,7 +311,7 @@ public class TreeCellSkin<T> extends CellSkinBase<TreeCell<T>> {
     /** {@inheritDoc} */
     @Override protected double computeMaxHeight(double width, double topInset, double rightInset, double bottomInset, double leftInset) {
         if (fixedCellSizeEnabled) {
-            return fixedCellSize;
+            return snapSizeY( fixedCellSize );
         }
 
         return super.computeMaxHeight(width, topInset, rightInset, bottomInset, leftInset);
