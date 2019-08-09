@@ -37,10 +37,33 @@ public final class TableViewSkinHelper
         return skin.getTableHeaderRow();
     }
 
+    /**
+     * Resizes column to fit content width.<br/>
+     * <strong>Works only for nonempty tables!</strong>
+     *
+     * @param tableSkin
+     *     table skin of column
+     * @param tc
+     *     column to be resized
+     */
     public static void resizeColumnToFitContent( TableViewSkinBase< ?, ?, ?, ?, ? > tableSkin,
         TableColumnBase< ?, ? > tc )
     {
         TableSkinUtils.resizeColumnToFitContent( tableSkin, tc, -1 );
+    }
+
+    /**
+     * Resizes column to fit header width.
+     *
+     * @param tableSkin
+     *     table skin of column
+     * @param tc
+     *     column to be resized
+     */
+    public static void resizeColumnToFitHeader( TableViewSkinBase< ?, ?, ?, ?, ? > tableSkin,
+        TableColumnBase< ?, ? > tc )
+    {
+        ExtendedTableSkinUtils.resizeColumnToFitHeader( tableSkin, tc );
     }
 
 }
