@@ -848,7 +848,7 @@ public abstract class LabeledSkinBase<C extends Labeled> extends SkinBase<C> {
         if (isIgnoreGraphic()) {
             height = snapSizeY( textHeight );
         } else if (isIgnoreText()) {
-            height = snapSizeY(graphic.minWidth(-1));
+            height = snapSizeY(graphic.minHeight(-1));
         } else if (contentDisplay == TOP || contentDisplay == BOTTOM){
             height = snapSizeY(textHeight + graphic.minHeight(-1) ) + snapSpaceY( labeled.getGraphicTextGap() );
         } else {
