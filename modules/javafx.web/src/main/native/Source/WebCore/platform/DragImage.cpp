@@ -30,6 +30,7 @@
 #include "FrameSnapshotting.h"
 #include "FrameView.h"
 #include "ImageBuffer.h"
+#include "NotImplemented.h"
 #include "Range.h"
 #include "RenderElement.h"
 #include "RenderObject.h"
@@ -37,6 +38,12 @@
 #include "TextIndicator.h"
 
 namespace WebCore {
+
+#if PLATFORM(COCOA)
+const float ColorSwatchCornerRadius = 4;
+const float ColorSwatchStrokeSize = 4;
+const float ColorSwatchWidth = 24;
+#endif
 
 DragImageRef fitDragImageToMaxSize(DragImageRef image, const IntSize& layoutSize, const IntSize& maxSize)
 {
@@ -95,20 +102,15 @@ static DragImageRef createDragImageFromSnapshot(std::unique_ptr<ImageBuffer> sna
     if (!snapshot)
         return nullptr;
 
-    ImageOrientationDescription orientation;
-#if ENABLE(CSS_IMAGE_ORIENTATION)
+    ImageOrientation orientation;
     if (node) {
         RenderObject* renderer = node->renderer();
         if (!renderer || !is<RenderElement>(renderer))
             return nullptr;
 
-        auto& renderElement = downcast<RenderElement>(*renderer);
-        orientation.setRespectImageOrientation(renderElement.shouldRespectImageOrientation());
-        orientation.setImageOrientationEnum(renderElement.style().imageOrientation());
+        orientation = downcast<RenderElement>(*renderer).imageOrientation();
     }
-#else
-    UNUSED_PARAM(node);
-#endif
+
     RefPtr<Image> image = ImageBuffer::sinkIntoImage(WTFMove(snapshot), PreserveResolution::Yes);
     if (!image)
         return nullptr;
@@ -148,10 +150,10 @@ struct ScopedFrameSelectionState {
     }
 
     const Frame& frame;
-    std::optional<SelectionRangeData::Context> selection;
+    Optional<SelectionRangeData::Context> selection;
 };
 
-#if !PLATFORM(IOS)
+#if !PLATFORM(IOS_FAMILY)
 
 DragImageRef createDragImageForRange(Frame& frame, Range& range, bool forceBlackText)
 {
@@ -222,13 +224,6 @@ DragImageRef platformAdjustDragImageForDeviceScaleFactor(DragImageRef image, flo
 }
 #endif
 
-#if !PLATFORM(COCOA) && !PLATFORM(WIN)
-DragImageRef createDragImageForLink(Element&, URL&, const String&, FontRenderingMode, float)
-{
-    return nullptr;
-}
-#endif
-
 #if !PLATFORM(MAC)
 const int linkDragBorderInset = 2;
 
@@ -259,6 +254,7 @@ DragImage::DragImage(DragImage&& other)
     : m_dragImageRef { std::exchange(other.m_dragImageRef, nullptr) }
 {
     m_indicatorData = other.m_indicatorData;
+    m_visiblePath = other.m_visiblePath;
 }
 
 DragImage& DragImage::operator=(DragImage&& other)
@@ -268,6 +264,7 @@ DragImage& DragImage::operator=(DragImage&& other)
 
     m_dragImageRef = std::exchange(other.m_dragImageRef, nullptr);
     m_indicatorData = other.m_indicatorData;
+    m_visiblePath = other.m_visiblePath;
 
     return *this;
 }
@@ -277,6 +274,51 @@ DragImage::~DragImage()
     if (m_dragImageRef)
         deleteDragImage(m_dragImageRef);
 }
+
+#if !PLATFORM(COCOA) && !PLATFORM(GTK) && !PLATFORM(WIN) && !PLATFORM(JAVA)
+
+IntSize dragImageSize(DragImageRef)
+{
+    notImplemented();
+    return { 0, 0 };
+}
+
+void deleteDragImage(DragImageRef)
+{
+    notImplemented();
+}
+
+DragImageRef scaleDragImage(DragImageRef, FloatSize)
+{
+    notImplemented();
+    return nullptr;
+}
+
+DragImageRef dissolveDragImageToFraction(DragImageRef, float)
+{
+    notImplemented();
+    return nullptr;
+}
+
+DragImageRef createDragImageFromImage(Image*, ImageOrientation)
+{
+    notImplemented();
+    return nullptr;
+}
+
+DragImageRef createDragImageIconForCachedImageFilename(const String&)
+{
+    notImplemented();
+    return nullptr;
+}
+
+DragImageRef createDragImageForLink(Element&, URL&, const String&, TextIndicatorData&, FontRenderingMode, float)
+{
+    notImplemented();
+    return nullptr;
+}
+
+#endif
 
 } // namespace WebCore
 

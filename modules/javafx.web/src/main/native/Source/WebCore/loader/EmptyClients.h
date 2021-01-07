@@ -40,6 +40,7 @@ namespace WebCore {
 
 class DiagnosticLoggingClient;
 class EditorClient;
+class HTMLImageElement;
 class PageConfiguration;
 
 class EmptyChromeClient : public ChromeClient {
@@ -106,25 +107,18 @@ class EmptyChromeClient : public ChromeClient {
     void invalidateContentsForSlowScroll(const IntRect&) final { }
     void scroll(const IntSize&, const IntRect&, const IntRect&) final { }
 
-#if USE(COORDINATED_GRAPHICS)
-    void delegatedScrollRequested(const IntPoint&) final { }
-    void resetUpdateAtlasForTesting() final { }
-#endif
-
     IntPoint screenToRootView(const IntPoint& p) const final { return p; }
     IntRect rootViewToScreen(const IntRect& r) const final { return r; }
-
-#if PLATFORM(IOS)
     IntPoint accessibilityScreenToRootView(const IntPoint& p) const final { return p; };
     IntRect rootViewToAccessibilityScreen(const IntRect& r) const final { return r; };
-#endif
+
+    void didFinishLoadingImageForElement(HTMLImageElement&) final { }
 
     PlatformPageClient platformPageClient() const final { return 0; }
     void contentsSizeChanged(Frame&, const IntSize&) const final { }
+    void intrinsicContentsSizeChanged(const IntSize&) const final { }
 
-    void mouseDidMoveOverElement(const HitTestResult&, unsigned) final { }
-
-    void setToolTip(const String&, TextDirection) final { }
+    void mouseDidMoveOverElement(const HitTestResult&, unsigned, const String&, TextDirection) final { }
 
     void print(Frame&) final { }
 
@@ -137,21 +131,24 @@ class EmptyChromeClient : public ChromeClient {
     std::unique_ptr<ColorChooser> createColorChooser(ColorChooserClient&, const Color&) final;
 #endif
 
+#if ENABLE(DATALIST_ELEMENT)
+    std::unique_ptr<DataListSuggestionPicker> createDataListSuggestionPicker(DataListSuggestionsClient&) final;
+#endif
+
     void runOpenPanel(Frame&, FileChooser&) final;
+    void showShareSheet(ShareDataWithParsedURL&, CompletionHandler<void(bool)>&&) final;
     void loadIconForFiles(const Vector<String>&, FileIconLoader&) final { }
 
     void elementDidFocus(Element&) final { }
     void elementDidBlur(Element&) final { }
 
-#if !PLATFORM(IOS)
     void setCursor(const Cursor&) final { }
     void setCursorHiddenUntilMouseMoves(bool) final { }
-#endif
 
     void scrollRectIntoView(const IntRect&) const final { }
 
     void attachRootGraphicsLayer(Frame&, GraphicsLayer*) final { }
-    void attachViewOverlayGraphicsLayer(Frame&, GraphicsLayer*) final { }
+    void attachViewOverlayGraphicsLayer(GraphicsLayer*) final { }
     void setNeedsOneShotDrawingSynchronization() final { }
     void scheduleCompositingLayerFlush() final { }
 
@@ -165,11 +162,10 @@ class EmptyChromeClient : public ChromeClient {
     void didPreventDefaultForEvent() final { }
 #endif
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     void didReceiveMobileDocType(bool) final { }
     void setNeedsScrollNotifications(Frame&, bool) final { }
-    void observedContentChange(Frame&) final { }
-    void clearContentChangeObservers(Frame&) final { }
+    void didFinishContentChangeObserving(Frame&, WKContentChange) final { }
     void notifyRevealedSelectionByScrollingFrame(Frame&) final { }
     void didLayout(LayoutType) final { }
     void didStartOverflowScroll() final { }
@@ -182,14 +178,14 @@ class EmptyChromeClient : public ChromeClient {
     void removeScrollingLayer(Node*, PlatformLayer*, PlatformLayer*) final { }
 
     void webAppOrientationsUpdated() final { };
-    void showPlaybackTargetPicker(bool) final { };
-#endif // PLATFORM(IOS)
+    void showPlaybackTargetPicker(bool, RouteSharingPolicy, const String&) final { };
+#endif // PLATFORM(IOS_FAMILY)
 
 #if ENABLE(ORIENTATION_EVENTS)
     int deviceOrientation() const final { return 0; }
 #endif
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     bool isStopping() final { return false; }
 #endif
 
@@ -197,17 +193,13 @@ class EmptyChromeClient : public ChromeClient {
 
     bool isEmptyChromeClient() const final { return true; }
 
-    void didAssociateFormControls(const Vector<RefPtr<Element>>&) final { }
+    void didAssociateFormControls(const Vector<RefPtr<Element>>&, Frame&) final { }
     bool shouldNotifyOnFormChanges() final { return false; }
 
     RefPtr<Icon> createIconForFiles(const Vector<String>& /* filenames */) final { return nullptr; }
 };
 
-WEBCORE_EXPORT void fillWithEmptyClients(PageConfiguration&);
-WEBCORE_EXPORT UniqueRef<EditorClient> createEmptyEditorClient();
 DiagnosticLoggingClient& emptyDiagnosticLoggingClient();
-
-class EmptyFrameNetworkingContext;
-WEBCORE_EXPORT Ref<FrameNetworkingContext> createEmptyFrameNetworkingContext();
+WEBCORE_EXPORT PageConfiguration pageConfigurationWithEmptyClients(PAL::SessionID);
 
 }

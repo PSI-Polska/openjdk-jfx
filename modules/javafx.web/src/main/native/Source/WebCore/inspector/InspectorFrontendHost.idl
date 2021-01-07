@@ -36,8 +36,14 @@
 ] interface InspectorFrontendHost {
     void loaded();
     void closeWindow();
+    void reopen();
+    void reset();
+
     void bringToFront();
     void inspectedURLChanged(DOMString newURL);
+
+    readonly attribute boolean supportsShowCertificate;
+    boolean showCertificate(DOMString serializedCertificate);
 
     void setZoomFactor(unrestricted float zoom);
     float zoomFactor();
@@ -49,13 +55,16 @@
     void setAttachedWindowHeight(unsigned long height);
     void setAttachedWindowWidth(unsigned long width);
 
+    void setSheetRect(unrestricted float x, unrestricted float y, unsigned long width, unsigned long height);
+
     void startWindowDrag();
     void moveWindowBy(unrestricted float x, unrestricted float y);
 
-    DOMString localizedStringsURL();
-    DOMString backendCommandsURL();
-    DOMString debuggableType();
-    unsigned long inspectionLevel();
+    readonly attribute boolean isRemote;
+    readonly attribute DOMString localizedStringsURL;
+    readonly attribute DOMString backendCommandsURL;
+    readonly attribute unsigned long inspectionLevel;
+    readonly attribute DebuggableInfo debuggableInfo;
 
     void copyText(DOMString text);
     void killText(DOMString text, boolean shouldPrependToKillRing, boolean shouldStartNewSequence);
@@ -65,8 +74,8 @@
     void append(DOMString url, DOMString content);
     void close(DOMString url);
 
-    DOMString platform();
-    DOMString port();
+    readonly attribute DOMString port;
+    readonly attribute DOMString platform;
 
     void showContextMenu(Event event, sequence<ContextMenuItem> items);
     void dispatchEventAsContextMenuEvent(Event event);
@@ -74,9 +83,16 @@
     void unbufferedLog(DOMString message);
 
     boolean isUnderTest();
+    boolean isExperimentalBuild();
 
     void beep();
     void inspectInspector();
+    boolean isBeingInspected();
+
+    readonly attribute boolean supportsDiagnosticLogging;
+#if ENABLE_INSPECTOR_TELEMETRY
+    void logDiagnosticEvent(DOMString eventName, DOMString content);
+#endif
 };
 
 dictionary ContextMenuItem {
@@ -86,4 +102,15 @@ dictionary ContextMenuItem {
     boolean enabled;
     boolean checked;
     sequence<ContextMenuItem> subItems;
+};
+
+[
+    JSGenerateToJSObject,
+]
+dictionary DebuggableInfo {
+    DOMString debuggableType;
+    DOMString targetPlatformName;
+    DOMString targetBuildVersion;
+    DOMString targetProductVersion;
+    boolean targetIsSimulator;
 };

@@ -29,7 +29,7 @@
 #include "DragImage.h"
 #include "IntPoint.h"
 #include "IntRect.h"
-#include "URL.h"
+#include <wtf/URL.h>
 
 namespace WebCore {
 
@@ -40,7 +40,7 @@ class DragData;
 class Element;
 class Frame;
 class FrameSelection;
-class HTMLAttachmentElement;
+class HTMLImageElement;
 class HTMLInputElement;
 class IntRect;
 class Page;
@@ -48,18 +48,15 @@ class PlatformMouseEvent;
 
 struct DragItem;
 struct DragState;
-struct PromisedBlobInfo;
+struct PromisedAttachmentInfo;
 
     class DragController {
         WTF_MAKE_NONCOPYABLE(DragController); WTF_MAKE_FAST_ALLOCATED;
     public:
-        DragController(Page&, DragClient&);
+        DragController(Page&, std::unique_ptr<DragClient>&&);
         ~DragController();
 
-        static std::unique_ptr<DragController> create(Page&, DragClient&);
         static DragOperation platformGenericDragOperation();
-
-        DragClient& client() const { return m_client; }
 
         WEBCORE_EXPORT DragOperation dragEntered(const DragData&);
         WEBCORE_EXPORT void dragExited(const DragData&);
@@ -79,8 +76,8 @@ struct PromisedBlobInfo;
         void setDragOffset(const IntPoint& offset) { m_dragOffset = offset; }
         const IntPoint& dragOffset() const { return m_dragOffset; }
         DragSourceAction dragSourceAction() const { return m_dragSourceAction; }
+        DragHandlingMethod dragHandlingMethod() const { return m_dragHandlingMethod; }
 
-        enum class DragHandlingMethod { None, EditPlainText, EditRichText, UploadFile, PageLoad, SetColor, NonDefault };
         Document* documentUnderMouse() const { return m_documentUnderMouse.get(); }
         DragDestinationAction dragDestinationAction() const { return m_dragDestinationAction; }
         DragSourceAction delegateDragSourceAction(const IntPoint& rootViewPoint);
@@ -89,6 +86,12 @@ struct PromisedBlobInfo;
         WEBCORE_EXPORT void dragEnded();
 
         WEBCORE_EXPORT void placeDragCaret(const IntPoint&);
+
+        const Vector<Ref<HTMLImageElement>>& droppedImagePlaceholders() const { return m_droppedImagePlaceholders; }
+        const RefPtr<Range>& droppedImagePlaceholderRange() const { return m_droppedImagePlaceholderRange; }
+
+        WEBCORE_EXPORT void finalizeDroppedImagePlaceholder(HTMLImageElement&);
+        WEBCORE_EXPORT void insertDroppedImagePlaceholdersAtCaret(const Vector<IntSize>& imageSizes);
 
         bool startDrag(Frame& src, const DragState&, DragOperation srcOp, const PlatformMouseEvent& dragEvent, const IntPoint& dragOrigin, HasNonDefaultPasteboardData);
         static const IntSize& maxDragImageSize();
@@ -115,8 +118,8 @@ struct PromisedBlobInfo;
         void mouseMovedIntoDocument(Document*);
         bool shouldUseCachedImageForDragImage(const Image&) const;
 
-        void doImageDrag(Element&, const IntPoint&, const IntRect&, Frame&, IntPoint&, const DragState&);
-        void doSystemDrag(DragImage, const IntPoint&, const IntPoint&, Frame&, const DragState&, PromisedBlobInfo&&);
+        void doImageDrag(Element&, const IntPoint&, const IntRect&, Frame&, IntPoint&, const DragState&, PromisedAttachmentInfo&&);
+        void doSystemDrag(DragImage, const IntPoint&, const IntPoint&, Frame&, const DragState&, PromisedAttachmentInfo&&);
 
         void beginDrag(DragItem, Frame&, const IntPoint& mouseDownPoint, const IntPoint& mouseDraggedPoint, DataTransfer&, DragSourceAction);
 
@@ -129,30 +132,37 @@ struct PromisedBlobInfo;
 #endif
         }
 
+        DragClient& client() const { return *m_client; }
+
+        bool tryToUpdateDroppedImagePlaceholders(const DragData&);
+        void removeAllDroppedImagePlaceholders();
+
         String platformContentTypeForBlobType(const String& type) const;
 
         void cleanupAfterSystemDrag();
         void declareAndWriteDragImage(DataTransfer&, Element&, const URL&, const String& label);
 
 #if ENABLE(ATTACHMENT_ELEMENT)
-        PromisedBlobInfo promisedBlobInfo(Frame&, HTMLAttachmentElement&);
+        PromisedAttachmentInfo promisedAttachmentInfo(Frame&, Element&);
 #endif
         Page& m_page;
-        DragClient& m_client;
+        std::unique_ptr<DragClient> m_client;
 
         RefPtr<Document> m_documentUnderMouse; // The document the mouse was last dragged over.
         RefPtr<Document> m_dragInitiator; // The Document (if any) that initiated the drag.
         RefPtr<HTMLInputElement> m_fileInputElementUnderMouse;
-        unsigned m_numberOfItemsToBeAccepted;
-        DragHandlingMethod m_dragHandlingMethod;
+        unsigned m_numberOfItemsToBeAccepted { 0 };
+        DragHandlingMethod m_dragHandlingMethod { DragHandlingMethod::None };
 
-        DragDestinationAction m_dragDestinationAction;
-        DragSourceAction m_dragSourceAction;
-        bool m_didInitiateDrag;
-        DragOperation m_sourceDragOperation; // Set in startDrag when a drag starts from a mouse down within WebKit
+        DragDestinationAction m_dragDestinationAction { DragDestinationActionNone };
+        DragSourceAction m_dragSourceAction { DragSourceActionNone };
+        bool m_didInitiateDrag { false };
+        DragOperation m_sourceDragOperation { DragOperationNone }; // Set in startDrag when a drag starts from a mouse down within WebKit
         IntPoint m_dragOffset;
         URL m_draggingImageURL;
         bool m_isPerformingDrop { false };
+        Vector<Ref<HTMLImageElement>> m_droppedImagePlaceholders;
+        RefPtr<Range> m_droppedImagePlaceholderRange;
     };
 
     WEBCORE_EXPORT bool isDraggableLink(const Element&);

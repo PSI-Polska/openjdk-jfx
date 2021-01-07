@@ -25,6 +25,7 @@
 #include "AffineTransform.h"
 #include "FloatRect.h"
 #include "SVGParserUtilities.h"
+#include <wtf/text/StringConcatenateNumbers.h>
 #include <wtf/text/StringView.h>
 
 namespace WebCore {
@@ -33,6 +34,11 @@ SVGPreserveAspectRatioValue::SVGPreserveAspectRatioValue()
     : m_align(SVG_PRESERVEASPECTRATIO_XMIDYMID)
     , m_meetOrSlice(SVG_MEETORSLICE_MEET)
 {
+}
+
+SVGPreserveAspectRatioValue::SVGPreserveAspectRatioValue(const String& value)
+{
+    parse(value);
 }
 
 ExceptionOr<void> SVGPreserveAspectRatioValue::setAlign(unsigned short align)
@@ -175,7 +181,7 @@ bool SVGPreserveAspectRatioValue::parseInternal(const UChar*& currParam, const U
     return true;
 }
 
-void SVGPreserveAspectRatioValue::transformRect(FloatRect& destRect, FloatRect& srcRect)
+void SVGPreserveAspectRatioValue::transformRect(FloatRect& destRect, FloatRect& srcRect) const
 {
     if (m_align == SVG_PRESERVEASPECTRATIO_NONE)
         return;

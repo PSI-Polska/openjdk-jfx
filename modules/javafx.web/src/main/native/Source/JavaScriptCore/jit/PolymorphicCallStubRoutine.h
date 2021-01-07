@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,13 +31,14 @@
 #include "CallVariant.h"
 #include "GCAwareJITStubRoutine.h"
 #include <wtf/Noncopyable.h>
+#include <wtf/UniqueArray.h>
 #include <wtf/Vector.h>
 
 namespace JSC {
 
 class CallLinkInfo;
 
-class PolymorphicCallNode : public BasicRawSentinelNode<PolymorphicCallNode> {
+class PolymorphicCallNode : public PackedRawSentinelNode<PolymorphicCallNode> {
     WTF_MAKE_NONCOPYABLE(PolymorphicCallNode);
 public:
     PolymorphicCallNode(CallLinkInfo* info)
@@ -49,11 +50,11 @@ public:
 
     void unlink(VM&);
 
-    bool hasCallLinkInfo(CallLinkInfo* info) { return m_callLinkInfo == info; }
+    bool hasCallLinkInfo(CallLinkInfo* info) { return m_callLinkInfo.get() == info; }
     void clearCallLinkInfo();
 
 private:
-    CallLinkInfo* m_callLinkInfo;
+    PackedPtr<CallLinkInfo> m_callLinkInfo;
 };
 
 class PolymorphicCallCase {
@@ -82,16 +83,24 @@ private:
 class PolymorphicCallStubRoutine : public GCAwareJITStubRoutine {
 public:
     PolymorphicCallStubRoutine(
-        const MacroAssemblerCodeRef&, VM&, const JSCell* owner,
-        ExecState* callerFrame, CallLinkInfo&, const Vector<PolymorphicCallCase>&,
-        std::unique_ptr<uint32_t[]> fastCounts);
+        const MacroAssemblerCodeRef<JITStubRoutinePtrTag>&, VM&, const JSCell* owner,
+        CallFrame* callerFrame, CallLinkInfo&, const Vector<PolymorphicCallCase>&,
+        UniqueArray<uint32_t>&& fastCounts);
 
     virtual ~PolymorphicCallStubRoutine();
 
     CallVariantList variants() const;
+    bool hasEdges() const;
     CallEdgeList edges() const;
 
     void clearCallNodesFor(CallLinkInfo*);
+
+    template<typename Functor>
+    void forEachDependentCell(const Functor& functor)
+    {
+        for (auto& variant : m_variants)
+            functor(variant.get());
+    }
 
     bool visitWeak(VM&) override;
 
@@ -100,7 +109,7 @@ protected:
 
 private:
     Vector<WriteBarrier<JSCell>, 2> m_variants;
-    std::unique_ptr<uint32_t[]> m_fastCounts;
+    UniqueArray<uint32_t> m_fastCounts;
     Bag<PolymorphicCallNode> m_callNodes;
 };
 

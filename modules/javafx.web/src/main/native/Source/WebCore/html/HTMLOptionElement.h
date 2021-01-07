@@ -32,6 +32,7 @@ class HTMLDataListElement;
 class HTMLSelectElement;
 
 class HTMLOptionElement final : public HTMLElement {
+    WTF_MAKE_ISO_ALLOCATED(HTMLOptionElement);
 public:
     static Ref<HTMLOptionElement> create(Document&);
     static Ref<HTMLOptionElement> create(const QualifiedName&, Document&);
@@ -72,7 +73,7 @@ private:
     bool rendererIsNeeded(const RenderStyle&) final { return false; }
     bool matchesDefaultPseudoClass() const final;
 
-    void parseAttribute(const QualifiedName&, const AtomicString&) final;
+    void parseAttribute(const QualifiedName&, const AtomString&) final;
 
     InsertedIntoAncestorResult insertedIntoAncestor(InsertionType, ContainerNode&) final;
     void accessKeyAction(bool) final;

@@ -34,15 +34,16 @@
 #include "Frame.h"
 #include "FrameView.h"
 #include "HTMLBodyElement.h"
-#include "HTMLDocument.h"
 #include "HTMLElement.h"
 #include "HTMLHtmlElement.h"
 #include "HTMLNames.h"
 #include "NodeTraversal.h"
 #include "NodeWithIndex.h"
 #include "ProcessingInstruction.h"
+#include "RenderBlock.h"
 #include "RenderBoxModelObject.h"
 #include "RenderText.h"
+#include "RenderView.h"
 #include "ScopedEventQueue.h"
 #include "TextIterator.h"
 #include "VisiblePosition.h"
@@ -53,7 +54,7 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 #include "SelectionRect.h"
 #endif
 
@@ -79,7 +80,7 @@ inline Range::Range(Document& ownerDocument)
     rangeCounter.increment();
 #endif
 
-    m_ownerDocument->attachRange(this);
+    m_ownerDocument->attachRange(*this);
 }
 
 Ref<Range> Range::create(Document& ownerDocument)
@@ -96,7 +97,7 @@ inline Range::Range(Document& ownerDocument, Node* startContainer, int startOffs
     rangeCounter.increment();
 #endif
 
-    m_ownerDocument->attachRange(this);
+    m_ownerDocument->attachRange(*this);
 
     // Simply setting the containers and offsets directly would not do any of the checking
     // that setStart and setEnd do, so we call those functions.
@@ -125,7 +126,7 @@ Ref<Range> Range::create(Document& ownerDocument, const VisiblePosition& visible
 
 Range::~Range()
 {
-    m_ownerDocument->detachRange(this);
+    m_ownerDocument->detachRange(*this);
 
 #ifndef NDEBUG
     rangeCounter.decrement();
@@ -135,11 +136,11 @@ Range::~Range()
 void Range::setDocument(Document& document)
 {
     ASSERT(m_ownerDocument.ptr() != &document);
-    m_ownerDocument->detachRange(this);
+    m_ownerDocument->detachRange(*this);
     m_ownerDocument = document;
     m_start.setToStartOfNode(document);
     m_end.setToStartOfNode(document);
-    m_ownerDocument->attachRange(this);
+    m_ownerDocument->attachRange(*this);
 }
 
 Node* Range::commonAncestorContainer(Node* containerA, Node* containerB)
@@ -475,27 +476,21 @@ ExceptionOr<bool> Range::intersectsNode(Node& refNode) const
     if (!refNode.isConnected() || &refNode.document() != &ownerDocument())
         return false;
 
-    ContainerNode* parentNode = refNode.parentNode();
+    auto* parentNode = refNode.parentNode();
     if (!parentNode)
         return true;
 
     unsigned nodeIndex = refNode.computeNodeIndex();
 
-    // If (parent, offset) is before end and (parent, offset + 1) is after start, return true.
+    // If (parentNode, nodeIndex) is before end and (parentNode, nodeIndex + 1) is after start, return true.
     // Otherwise, return false.
-    auto result = comparePoint(*parentNode, nodeIndex);
-    if (result.hasException())
-        return result.releaseException();
-    auto compareFirst = result.releaseReturnValue();
-    result = comparePoint(*parentNode, nodeIndex + 1);
-    if (result.hasException())
-        return result.releaseException();
-    auto compareSecond = result.releaseReturnValue();
-
-    bool isFirstBeforeEnd = m_start == m_end ? compareFirst < 0 : compareFirst <= 0;
-    bool isSecondAfterStart = m_start == m_end ? compareSecond > 0 : compareSecond >= 0;
-
-    return isFirstBeforeEnd && isSecondAfterStart;
+    auto compareEndResult = compareBoundaryPoints(parentNode, nodeIndex, m_end.container(), m_end.offset());
+    if (compareEndResult.hasException())
+        return compareEndResult.releaseException();
+    auto compareStartResult = compareBoundaryPoints(parentNode, nodeIndex + 1, m_start.container(), m_start.offset());
+    if (compareStartResult.hasException())
+        return compareStartResult.releaseException();
+    return compareEndResult.returnValue() == -1 && compareStartResult.returnValue() == 1;
 }
 
 static inline Node* highestAncestorUnderCommonRoot(Node* node, Node* commonRoot)
@@ -559,7 +554,7 @@ ExceptionOr<RefPtr<DocumentFragment>> Range::processContents(ActionType action)
         fragment = DocumentFragment::create(ownerDocument());
 
     if (collapsed())
-        return WTFMove(fragment);
+        return fragment;
 
     RefPtr<Node> commonRoot = commonAncestorContainer();
     ASSERT(commonRoot);
@@ -568,7 +563,7 @@ ExceptionOr<RefPtr<DocumentFragment>> Range::processContents(ActionType action)
         auto result = processContentsBetweenOffsets(action, fragment, &startContainer(), m_start.offset(), m_end.offset());
         if (result.hasException())
             return result.releaseException();
-        return WTFMove(fragment);
+        return fragment;
     }
 
     // Since mutation events can modify the range during the process, the boundary points need to be saved.
@@ -661,7 +656,7 @@ ExceptionOr<RefPtr<DocumentFragment>> Range::processContents(ActionType action)
             return result.releaseException();
     }
 
-    return WTFMove(fragment);
+    return fragment;
 }
 
 static inline ExceptionOr<void> deleteCharacterData(CharacterData& data, unsigned startOffset, unsigned endOffset)
@@ -762,7 +757,7 @@ static ExceptionOr<RefPtr<Node>> processContentsBetweenOffsets(Range::ActionType
         break;
     }
 
-    return WTFMove(result);
+    return result;
 }
 
 static ExceptionOr<void> processNodes(Range::ActionType action, Vector<Ref<Node>>& nodes, Node* oldContainer, RefPtr<Node> newContainer)
@@ -860,7 +855,7 @@ ExceptionOr<RefPtr<Node>> processAncestorsAndTheirSiblings(Range::ActionType act
         firstChildInAncestorToProcess = direction == ProcessContentsForward ? ancestor->nextSibling() : ancestor->previousSibling();
     }
 
-    return WTFMove(clonedContainer);
+    return clonedContainer;
 }
 
 ExceptionOr<Ref<DocumentFragment>> Range::extractContents()
@@ -941,20 +936,13 @@ String Range::toString() const
     for (Node* node = firstNode(); node != pastLast; node = NodeTraversal::next(*node)) {
         auto type = node->nodeType();
         if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
-            auto& data = downcast<CharacterData>(*node).data();
-            unsigned length = data.length();
-            unsigned start = node == &startContainer() ? std::min(m_start.offset(), length) : 0U;
-            unsigned end = node == &endContainer() ? std::min(std::max(start, m_end.offset()), length) : length;
-            builder.append(data, start, end - start);
+            unsigned start = node == &startContainer() ? m_start.offset() : 0U;
+            unsigned end = node == &endContainer() ? std::max(start, m_end.offset()) : std::numeric_limits<unsigned>::max();
+            builder.appendSubstring(downcast<CharacterData>(*node).data(), start, end - start);
         }
     }
 
     return builder.toString();
-}
-
-String Range::toHTML() const
-{
-    return createMarkup(*this);
 }
 
 String Range::text() const
@@ -977,7 +965,7 @@ ExceptionOr<Ref<DocumentFragment>> Range::createContextualFragment(const String&
         element = &downcast<Element>(node);
     else
         element = node.parentElement();
-    if (!element || (is<HTMLDocument>(element->document()) && is<HTMLHtmlElement>(*element)))
+    if (!element || (element->document().isHTMLDocument() && is<HTMLHtmlElement>(*element)))
         element = HTMLBodyElement::create(node.document());
     return WebCore::createContextualFragment(*element, markup, AllowScriptingContentAndDoNotMarkAlreadyStarted);
 }
@@ -1132,7 +1120,7 @@ ExceptionOr<void> Range::setStartBefore(Node& refNode)
 
 Node* Range::firstNode() const
 {
-    if (startContainer().offsetInCharacters())
+    if (startContainer().isCharacterDataNode())
         return &startContainer();
     if (Node* child = startContainer().traverseToChildAt(m_start.offset()))
         return child;
@@ -1148,31 +1136,33 @@ ShadowRoot* Range::shadowRoot() const
 
 Node* Range::pastLastNode() const
 {
-    if (endContainer().offsetInCharacters())
+    if (endContainer().isCharacterDataNode())
         return NodeTraversal::nextSkippingChildren(endContainer());
     if (Node* child = endContainer().traverseToChildAt(m_end.offset()))
         return child;
     return NodeTraversal::nextSkippingChildren(endContainer());
 }
 
-IntRect Range::absoluteBoundingBox() const
+IntRect Range::absoluteBoundingBox(OptionSet<BoundingRectBehavior> rectOptions) const
 {
     IntRect result;
     Vector<IntRect> rects;
-    absoluteTextRects(rects);
+    bool useSelectionHeight = false;
+    RangeInFixedPosition* inFixed = nullptr;
+    absoluteTextRects(rects, useSelectionHeight, inFixed, rectOptions);
     for (auto& rect : rects)
         result.unite(rect);
     return result;
 }
 
-Vector<FloatRect> Range::absoluteRectsForRangeInText(Node* node, RenderText& renderText, bool useSelectionHeight, bool& isFixed, RespectClippingForTextRects respectClippingForTextRects) const
+Vector<FloatRect> Range::absoluteRectsForRangeInText(Node* node, RenderText& renderText, bool useSelectionHeight, bool& isFixed, OptionSet<BoundingRectBehavior> rectOptions) const
 {
     unsigned startOffset = node == &startContainer() ? m_start.offset() : 0;
     unsigned endOffset = node == &endContainer() ? m_end.offset() : std::numeric_limits<unsigned>::max();
 
-    auto textQuads = renderText.absoluteQuadsForRange(startOffset, endOffset, useSelectionHeight, &isFixed);
+    auto textQuads = renderText.absoluteQuadsForRange(startOffset, endOffset, useSelectionHeight, rectOptions.contains(BoundingRectBehavior::IgnoreEmptyTextSelections), &isFixed);
 
-    if (respectClippingForTextRects == RespectClippingForTextRects::Yes) {
+    if (rectOptions.contains(BoundingRectBehavior::RespectClipping)) {
         Vector<FloatRect> clippedRects;
         clippedRects.reserveInitialCapacity(textQuads.size());
 
@@ -1194,7 +1184,7 @@ Vector<FloatRect> Range::absoluteRectsForRangeInText(Node* node, RenderText& ren
     return floatRects;
 }
 
-void Range::absoluteTextRects(Vector<IntRect>& rects, bool useSelectionHeight, RangeInFixedPosition* inFixed, RespectClippingForTextRects respectClippingForTextRects) const
+void Range::absoluteTextRects(Vector<IntRect>& rects, bool useSelectionHeight, RangeInFixedPosition* inFixed, OptionSet<BoundingRectBehavior> rectOptions) const
 {
     // FIXME: This function should probably return FloatRects.
 
@@ -1210,7 +1200,7 @@ void Range::absoluteTextRects(Vector<IntRect>& rects, bool useSelectionHeight, R
         if (renderer->isBR())
             renderer->absoluteRects(rects, flooredLayoutPoint(renderer->localToAbsolute()));
         else if (is<RenderText>(*renderer)) {
-            auto rectsForRenderer = absoluteRectsForRangeInText(node, downcast<RenderText>(*renderer), useSelectionHeight, isFixed, respectClippingForTextRects);
+            auto rectsForRenderer = absoluteRectsForRangeInText(node, downcast<RenderText>(*renderer), useSelectionHeight, isFixed, rectOptions);
             for (auto& rect : rectsForRenderer)
                 rects.append(enclosingIntRect(rect));
         } else
@@ -1239,7 +1229,7 @@ void Range::absoluteTextQuads(Vector<FloatQuad>& quads, bool useSelectionHeight,
         else if (is<RenderText>(*renderer)) {
             unsigned startOffset = node == &startContainer() ? m_start.offset() : 0;
             unsigned endOffset = node == &endContainer() ? m_end.offset() : std::numeric_limits<unsigned>::max();
-            quads.appendVector(downcast<RenderText>(*renderer).absoluteQuadsForRange(startOffset, endOffset, useSelectionHeight, &isFixed));
+            quads.appendVector(downcast<RenderText>(*renderer).absoluteQuadsForRange(startOffset, endOffset, useSelectionHeight, false /* ignoreEmptyTextSelections */, &isFixed));
         } else
             continue;
         allFixed &= isFixed;
@@ -1250,7 +1240,7 @@ void Range::absoluteTextQuads(Vector<FloatQuad>& quads, bool useSelectionHeight,
         *inFixed = allFixed ? EntirelyFixedPosition : (someFixed ? PartiallyFixedPosition : NotFixedPosition);
 }
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 static bool intervalsSufficientlyOverlap(int startA, int endA, int startB, int endB)
 {
     if (endA <= startA || endB <= startB)
@@ -1310,7 +1300,7 @@ int Range::collectSelectionRectsWithoutUnionInteriorLines(Vector<SelectionRect>&
     for (Node* node = firstNode(); node && node != stopNode; node = NodeTraversal::next(*node)) {
         RenderObject* renderer = node->renderer();
         // Only ask leaf render objects for their line box rects.
-        if (renderer && !renderer->firstChildSlow() && renderer->style().userSelect() != SELECT_NONE) {
+        if (renderer && !renderer->firstChildSlow() && renderer->style().userSelect() != UserSelect::None) {
             bool isStartNode = renderer->node() == &startContainer;
             bool isEndNode = renderer->node() == &endContainer;
             if (hasFlippedWritingMode != renderer->style().isFlippedBlocksWritingMode())
@@ -1431,7 +1421,7 @@ int Range::collectSelectionRectsWithoutUnionInteriorLines(Vector<SelectionRect>&
         if (rects[j].lineNumber() != rects[j - 1].lineNumber())
             continue;
         SelectionRect& previousRect = rects[j - 1];
-        bool previousRectMayNotReachRightEdge = (previousRect.direction() == LTR && previousRect.containsEnd()) || (previousRect.direction() == RTL && previousRect.containsStart());
+        bool previousRectMayNotReachRightEdge = (previousRect.direction() == TextDirection::LTR && previousRect.containsEnd()) || (previousRect.direction() == TextDirection::RTL && previousRect.containsStart());
         if (previousRectMayNotReachRightEdge)
             continue;
         int adjustedWidth = rects[j].logicalLeft() - previousRect.logicalLeft();
@@ -1446,10 +1436,10 @@ int Range::collectSelectionRectsWithoutUnionInteriorLines(Vector<SelectionRect>&
         SelectionRect& selectionRect = rects[i];
         if (!selectionRect.isLineBreak() && selectionRect.lineNumber() >= maxLineNumber)
             continue;
-        if (selectionRect.direction() == RTL && selectionRect.isFirstOnLine()) {
+        if (selectionRect.direction() == TextDirection::RTL && selectionRect.isFirstOnLine()) {
             selectionRect.setLogicalWidth(selectionRect.logicalWidth() + selectionRect.logicalLeft() - selectionRect.minX());
             selectionRect.setLogicalLeft(selectionRect.minX());
-        } else if (selectionRect.direction() == LTR && selectionRect.isLastOnLine())
+        } else if (selectionRect.direction() == TextDirection::LTR && selectionRect.isLastOnLine())
             selectionRect.setLogicalWidth(selectionRect.maxX() - selectionRect.logicalLeft());
     }
 
@@ -1577,7 +1567,7 @@ bool rangesOverlap(const Range* a, const Range* b)
     if (a == b)
         return true;
 
-    if (a->commonAncestorContainer()->ownerDocument() != b->commonAncestorContainer()->ownerDocument())
+    if (!areNodesConnectedInSameTreeScope(a->commonAncestorContainer(), b->commonAncestorContainer()))
         return false;
 
     short startToStart = a->compareBoundaryPoints(Range::START_TO_START, *b).releaseReturnValue();
@@ -1669,9 +1659,21 @@ void Range::nodeWillBeRemoved(Node& node)
     boundaryNodeWillBeRemoved(m_end, node);
 }
 
-static inline void boundaryTextInserted(RangeBoundaryPoint& boundary, Node* text, unsigned offset, unsigned length)
+bool Range::parentlessNodeMovedToNewDocumentAffectsRange(Node& node)
 {
-    if (boundary.container() != text)
+    return node.containsIncludingShadowDOM(m_start.container());
+}
+
+void Range::updateRangeForParentlessNodeMovedToNewDocument(Node& node)
+{
+    m_ownerDocument->detachRange(*this);
+    m_ownerDocument = node.document();
+    m_ownerDocument->attachRange(*this);
+}
+
+static inline void boundaryTextInserted(RangeBoundaryPoint& boundary, Node& text, unsigned offset, unsigned length)
+{
+    if (boundary.container() != &text)
         return;
     unsigned boundaryOffset = boundary.offset();
     if (offset >= boundaryOffset)
@@ -1679,17 +1681,16 @@ static inline void boundaryTextInserted(RangeBoundaryPoint& boundary, Node* text
     boundary.setOffset(boundaryOffset + length);
 }
 
-void Range::textInserted(Node* text, unsigned offset, unsigned length)
+void Range::textInserted(Node& text, unsigned offset, unsigned length)
 {
-    ASSERT(text);
-    ASSERT(&text->document() == &ownerDocument());
+    ASSERT(&text.document() == &ownerDocument());
     boundaryTextInserted(m_start, text, offset, length);
     boundaryTextInserted(m_end, text, offset, length);
 }
 
-static inline void boundaryTextRemoved(RangeBoundaryPoint& boundary, Node* text, unsigned offset, unsigned length)
+static inline void boundaryTextRemoved(RangeBoundaryPoint& boundary, Node& text, unsigned offset, unsigned length)
 {
-    if (boundary.container() != text)
+    if (boundary.container() != &text)
         return;
     unsigned boundaryOffset = boundary.offset();
     if (offset >= boundaryOffset)
@@ -1700,10 +1701,9 @@ static inline void boundaryTextRemoved(RangeBoundaryPoint& boundary, Node* text,
         boundary.setOffset(boundaryOffset - length);
 }
 
-void Range::textRemoved(Node* text, unsigned offset, unsigned length)
+void Range::textRemoved(Node& text, unsigned offset, unsigned length)
 {
-    ASSERT(text);
-    ASSERT(&text->document() == &ownerDocument());
+    ASSERT(&text.document() == &ownerDocument());
     boundaryTextRemoved(m_start, text, offset, length);
     boundaryTextRemoved(m_end, text, offset, length);
 }
@@ -1728,15 +1728,15 @@ void Range::textNodesMerged(NodeWithIndex& oldNode, unsigned offset)
     boundaryTextNodesMerged(m_end, oldNode, offset);
 }
 
-static inline void boundaryTextNodesSplit(RangeBoundaryPoint& boundary, Text* oldNode)
+static inline void boundaryTextNodesSplit(RangeBoundaryPoint& boundary, Text& oldNode)
 {
-    auto* parent = oldNode->parentNode();
-    if (boundary.container() == oldNode) {
-        unsigned splitOffset = oldNode->length();
+    auto* parent = oldNode.parentNode();
+    if (boundary.container() == &oldNode) {
+        unsigned splitOffset = oldNode.length();
         unsigned boundaryOffset = boundary.offset();
         if (boundaryOffset > splitOffset) {
             if (parent)
-                boundary.set(*oldNode->nextSibling(), boundaryOffset - splitOffset, 0);
+                boundary.set(*oldNode.nextSibling(), boundaryOffset - splitOffset, 0);
             else
                 boundary.setOffset(splitOffset);
         }
@@ -1744,20 +1744,18 @@ static inline void boundaryTextNodesSplit(RangeBoundaryPoint& boundary, Text* ol
     }
     if (!parent)
         return;
-    if (boundary.container() == parent && boundary.childBefore() == oldNode) {
-        auto* newChild = oldNode->nextSibling();
+    if (boundary.container() == parent && boundary.childBefore() == &oldNode) {
+        auto* newChild = oldNode.nextSibling();
         ASSERT(newChild);
         boundary.setToAfterChild(*newChild);
     }
 }
 
-void Range::textNodeSplit(Text* oldNode)
+void Range::textNodeSplit(Text& oldNode)
 {
-    ASSERT(oldNode);
-    ASSERT(&oldNode->document() == &ownerDocument());
-    ASSERT(oldNode->isTextNode());
-    ASSERT(!oldNode->parentNode() || oldNode->nextSibling());
-    ASSERT(!oldNode->parentNode() || oldNode->nextSibling()->isTextNode());
+    ASSERT(&oldNode.document() == &ownerDocument());
+    ASSERT(!oldNode.parentNode() || oldNode.nextSibling());
+    ASSERT(!oldNode.parentNode() || oldNode.nextSibling()->isTextNode());
     boundaryTextNodesSplit(m_start, oldNode);
     boundaryTextNodesSplit(m_end, oldNode);
 }
@@ -1803,13 +1801,14 @@ Ref<DOMRect> Range::getBoundingClientRect() const
     return DOMRect::create(boundingRect(CoordinateSpace::Client));
 }
 
-Vector<FloatRect> Range::borderAndTextRects(CoordinateSpace space, RespectClippingForTextRects respectClippingForTextRects) const
+Vector<FloatRect> Range::borderAndTextRects(CoordinateSpace space, OptionSet<BoundingRectBehavior> rectOptions) const
 {
     Vector<FloatRect> rects;
 
     ownerDocument().updateLayoutIgnorePendingStylesheets();
 
     Node* stopNode = pastLastNode();
+    bool useVisibleBounds = rectOptions.contains(BoundingRectBehavior::UseVisibleBounds);
 
     HashSet<Node*> selectedElementsSet;
     for (Node* node = firstNode(); node != stopNode; node = NodeTraversal::next(*node)) {
@@ -1822,9 +1821,24 @@ Vector<FloatRect> Range::borderAndTextRects(CoordinateSpace space, RespectClippi
     for (Node* parent = lastNode->parentNode(); parent; parent = parent->parentNode())
         selectedElementsSet.remove(parent);
 
+    OptionSet<RenderObject::VisibleRectContextOption> visibleRectOptions = { RenderObject::VisibleRectContextOption::UseEdgeInclusiveIntersection, RenderObject::VisibleRectContextOption::ApplyCompositedClips, RenderObject::VisibleRectContextOption::ApplyCompositedContainerScrolls };
+
     for (Node* node = firstNode(); node != stopNode; node = NodeTraversal::next(*node)) {
-        if (is<Element>(*node) && selectedElementsSet.contains(node) && !selectedElementsSet.contains(node->parentNode())) {
+        if (is<Element>(*node) && selectedElementsSet.contains(node) && (useVisibleBounds || !node->parentNode() || !selectedElementsSet.contains(node->parentNode()))) {
             if (auto* renderer = downcast<Element>(*node).renderBoxModelObject()) {
+                if (useVisibleBounds) {
+                    auto localBounds = renderer->borderBoundingBox();
+                    auto rootClippedBounds = renderer->computeVisibleRectInContainer(localBounds, &renderer->view(), { false, false, visibleRectOptions });
+                    if (!rootClippedBounds)
+                        continue;
+                    auto snappedBounds = snapRectToDevicePixels(*rootClippedBounds, node->document().deviceScaleFactor());
+                    if (space == CoordinateSpace::Client)
+                        node->document().convertAbsoluteToClientRect(snappedBounds, renderer->style());
+                    rects.append(snappedBounds);
+
+                    continue;
+                }
+
                 Vector<FloatQuad> elementQuads;
                 renderer->absoluteQuads(elementQuads);
                 if (space == CoordinateSpace::Client)
@@ -1836,7 +1850,7 @@ Vector<FloatRect> Range::borderAndTextRects(CoordinateSpace space, RespectClippi
         } else if (is<Text>(*node)) {
             if (auto* renderer = downcast<Text>(*node).renderer()) {
                 bool isFixed;
-                auto clippedRects = absoluteRectsForRangeInText(node, *renderer, false, isFixed, respectClippingForTextRects);
+                auto clippedRects = absoluteRectsForRangeInText(node, *renderer, false, isFixed, rectOptions);
                 if (space == CoordinateSpace::Client)
                     node->document().convertAbsoluteToClientRects(clippedRects, renderer->style());
 
@@ -1845,20 +1859,26 @@ Vector<FloatRect> Range::borderAndTextRects(CoordinateSpace space, RespectClippi
         }
     }
 
+    if (rectOptions.contains(BoundingRectBehavior::IgnoreTinyRects)) {
+        rects.removeAllMatching([&] (const FloatRect& rect) -> bool {
+            return rect.area() <= 1;
+        });
+    }
+
     return rects;
 }
 
-FloatRect Range::boundingRect(CoordinateSpace space, RespectClippingForTextRects respectClippingForTextRects) const
+FloatRect Range::boundingRect(CoordinateSpace space, OptionSet<BoundingRectBehavior> rectOptions) const
 {
     FloatRect result;
-    for (auto& rect : borderAndTextRects(space, respectClippingForTextRects))
-        result.unite(rect);
+    for (auto& rect : borderAndTextRects(space, rectOptions))
+        result.uniteIfNonZero(rect);
     return result;
 }
 
-FloatRect Range::absoluteBoundingRect(RespectClippingForTextRects respectClippingForTextRects) const
+FloatRect Range::absoluteBoundingRect(OptionSet<BoundingRectBehavior> rectOptions) const
 {
-    return boundingRect(CoordinateSpace::Absolute, respectClippingForTextRects);
+    return boundingRect(CoordinateSpace::Absolute, rectOptions);
 }
 
 WTF::TextStream& operator<<(WTF::TextStream& ts, const RangeBoundaryPoint& r)

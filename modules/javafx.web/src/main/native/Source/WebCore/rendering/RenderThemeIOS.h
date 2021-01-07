@@ -25,9 +25,19 @@
 
 #pragma once
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 
+#include "CSSValueKey.h"
 #include "RenderThemeCocoa.h"
+
+#if USE(SYSTEM_PREVIEW)
+#if HAVE(IOSURFACE)
+#include "IOSurface.h"
+#endif
+#include <wtf/RetainPtr.h>
+#endif
+
+OBJC_CLASS CIContext;
 
 namespace WebCore {
 
@@ -46,6 +56,17 @@ public:
 
     WEBCORE_EXPORT static void setContentSizeCategory(const String&);
 
+#if USE(SYSTEM_PREVIEW)
+    void paintSystemPreviewBadge(Image&, const PaintInfo&, const FloatRect&) override;
+#endif
+
+    using CSSValueToSystemColorMap = HashMap<CSSValueKey, Color>;
+
+    WEBCORE_EXPORT static const CSSValueToSystemColorMap& cssValueToSystemColorMap();
+    WEBCORE_EXPORT static void setCSSValueToSystemColorMap(CSSValueToSystemColorMap&&);
+
+    WEBCORE_EXPORT static void setFocusRingColor(const Color&);
+
 protected:
     LengthBox popupInternalPaddingBox(const RenderStyle&) const override;
 
@@ -53,16 +74,16 @@ protected:
     void updateCachedSystemFontDescription(CSSValueID, FontCascadeDescription&) const override;
     int baselinePosition(const RenderBox&) const override;
 
-    bool isControlStyled(const RenderStyle&, const BorderData&, const FillLayer& background, const Color& backgroundColor) const override;
+    bool isControlStyled(const RenderStyle&, const RenderStyle& userAgentStyle) const override;
 
     // Methods for each appearance value.
-    void adjustCheckboxStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustCheckboxStyle(RenderStyle&, const Element*) const override;
     bool paintCheckboxDecorations(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    void adjustRadioStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustRadioStyle(RenderStyle&, const Element*) const override;
     bool paintRadioDecorations(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    void adjustButtonStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustButtonStyle(RenderStyle&, const Element*) const override;
     bool paintButtonDecorations(const RenderObject&, const PaintInfo&, const IntRect&) override;
     bool paintPushButtonDecorations(const RenderObject&, const PaintInfo&, const IntRect&) override;
     void setButtonSize(RenderStyle&) const override;
@@ -72,10 +93,10 @@ protected:
     bool paintTextFieldDecorations(const RenderObject&, const PaintInfo&, const FloatRect&) override;
     bool paintTextAreaDecorations(const RenderObject&, const PaintInfo&, const FloatRect&) override;
 
-    void adjustMenuListButtonStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustMenuListButtonStyle(RenderStyle&, const Element*) const override;
     bool paintMenuListButtonDecorations(const RenderBox&, const PaintInfo&, const FloatRect&) override;
 
-    void adjustSliderTrackStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustSliderTrackStyle(RenderStyle&, const Element*) const override;
     bool paintSliderTrack(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
     void adjustSliderThumbSize(RenderStyle&, const Element*) const override;
@@ -84,7 +105,7 @@ protected:
     // Returns the repeat interval of the animation for the progress bar.
     Seconds animationRepeatIntervalForProgressBar(RenderProgress&) const override;
     // Returns the duration of the animation for the progress bar.
-    double animationDurationForProgressBar(RenderProgress&) const override;
+    Seconds animationDurationForProgressBar(RenderProgress&) const override;
 
     bool paintProgressBar(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
@@ -93,18 +114,22 @@ protected:
     int sliderTickOffsetFromTrackCenter() const override;
 #endif
 
-    void adjustSearchFieldStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustSearchFieldStyle(RenderStyle&, const Element*) const override;
     bool paintSearchFieldDecorations(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    Color platformActiveSelectionBackgroundColor() const override;
-    Color platformInactiveSelectionBackgroundColor() const override;
+    bool supportsFocusRing(const RenderStyle&) const final;
+
+    Color platformActiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformInactiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+#if ENABLE(FULL_KEYBOARD_ACCESS)
+    Color platformFocusRingColor(OptionSet<StyleColor::Options>) const final;
+#endif
 
 #if ENABLE(TOUCH_EVENTS)
     Color platformTapHighlightColor() const override { return 0x4D1A1A1A; }
 #endif
 
     bool shouldHaveSpinButton(const HTMLInputElement&) const override;
-    bool shouldHaveCapsLockIndicator(const HTMLInputElement&) const override;
 
 #if ENABLE(VIDEO)
     String mediaControlsStyleSheet() override;
@@ -128,21 +153,31 @@ private:
 
     void purgeCaches() override;
 
+#if PLATFORM(WATCHOS)
+    String extraDefaultStyleSheet() final;
+#endif
+
     const Color& shadowColor() const;
     FloatRect addRoundedBorderClip(const RenderObject& box, GraphicsContext&, const IntRect&);
 
-    Color systemColor(CSSValueID) const override;
+    Color systemColor(CSSValueID, OptionSet<StyleColor::Options>) const override;
 
     String m_legacyMediaControlsScript;
     String m_mediaControlsScript;
     String m_legacyMediaControlsStyleSheet;
     String m_mediaControlsStyleSheet;
 
-    mutable HashMap<int, Color> m_systemColorCache;
+#if USE(SYSTEM_PREVIEW)
+    RetainPtr<CIContext> m_ciContext;
+#if HAVE(IOSURFACE)
+    std::unique_ptr<IOSurface> m_largeBadgeSurface;
+    std::unique_ptr<IOSurface> m_smallBadgeSurface;
+#endif
+#endif
 
     bool m_shouldMockBoldSystemFontForAccessibility { false };
 };
 
 }
 
-#endif // PLATFORM(IOS)
+#endif // PLATFORM(IOS_FAMILY)

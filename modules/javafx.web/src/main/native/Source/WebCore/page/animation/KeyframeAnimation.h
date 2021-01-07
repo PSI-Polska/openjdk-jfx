@@ -34,6 +34,7 @@
 
 namespace WebCore {
 
+class FilterOperations;
 class RenderStyle;
 
 // A KeyframeAnimation tracks the state of an explicit animation for a single RenderElement.
@@ -44,24 +45,25 @@ public:
         return adoptRef(*new KeyframeAnimation(animation, element, compositeAnimation, unanimatedStyle));
     }
 
-    bool animate(CompositeAnimation&, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& animatedStyle, bool& didBlendStyle);
+    OptionSet<AnimateChange> animate(CompositeAnimation&, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& animatedStyle);
     void getAnimatedStyle(std::unique_ptr<RenderStyle>&) override;
 
     bool computeExtentOfTransformAnimation(LayoutRect&) const override;
 
     const KeyframeList& keyframes() const { return m_keyframes; }
 
-    const AtomicString& name() const { return m_keyframes.animationName(); }
+    const AtomString& name() const { return m_keyframes.animationName(); }
 
     bool hasAnimationForProperty(CSSPropertyID) const;
 
     bool triggersStackingContext() const { return m_triggersStackingContext; }
     bool dependsOnLayout() const { return m_dependsOnLayout; }
+    bool affectsAcceleratedProperty() const { return m_hasAcceleratedProperty; }
 
     void setUnanimatedStyle(std::unique_ptr<RenderStyle> style) { m_unanimatedStyle = WTFMove(style); }
     const RenderStyle& unanimatedStyle() const override { return *m_unanimatedStyle; }
 
-    std::optional<Seconds> timeToNextService() override;
+    Optional<Seconds> timeToNextService() override;
 
 protected:
     void onAnimationStart(double elapsedTime) override;
@@ -69,13 +71,13 @@ protected:
     void onAnimationEnd(double elapsedTime) override;
     bool startAnimation(double timeOffset) override;
     void pauseAnimation(double timeOffset) override;
-    void endAnimation() override;
+    void endAnimation(bool fillingForwards = false) override;
 
     void overrideAnimations() override;
     void resumeOverriddenAnimations() override;
 
     bool shouldSendEventForListener(Document::ListenerType inListenerType) const;
-    bool sendAnimationEvent(const AtomicString&, double elapsedTime);
+    bool sendAnimationEvent(const AtomString&, double elapsedTime);
 
     bool affectsProperty(CSSPropertyID) const override;
 
@@ -83,7 +85,6 @@ protected:
 
     bool computeExtentOfAnimationForMatchingTransformLists(const FloatRect& rendererBox, LayoutRect&) const;
 
-    void computeStackingContextImpact();
     void computeLayoutDependency();
     void resolveKeyframeStyles();
     void validateTransformFunctionList();
@@ -91,6 +92,8 @@ protected:
 #if ENABLE(FILTERS_LEVEL_2)
     void checkForMatchingBackdropFilterFunctionLists();
 #endif
+    void checkForMatchingColorFilterFunctionLists();
+    bool checkForMatchingFilterFunctionLists(CSSPropertyID, const std::function<const FilterOperations& (const RenderStyle&)>&) const;
 
 private:
     KeyframeAnimation(const Animation&, Element&, CompositeAnimation&, const RenderStyle& unanimatedStyle);
@@ -104,6 +107,7 @@ private:
 
     bool m_startEventDispatched { false };
     bool m_triggersStackingContext { false };
+    bool m_hasAcceleratedProperty { false };
     bool m_dependsOnLayout { false };
 };
 

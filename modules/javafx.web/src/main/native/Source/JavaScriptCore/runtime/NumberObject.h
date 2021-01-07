@@ -30,7 +30,13 @@ protected:
     void finishCreation(VM&);
 
 public:
-    typedef JSWrapperObject Base;
+    using Base = JSWrapperObject;
+
+    template<typename, SubspaceAccess mode>
+    static IsoSubspace* subspaceFor(VM& vm)
+    {
+        return &vm.numberObjectSpace;
+    }
 
     static NumberObject* create(VM& vm, Structure* structure)
     {
@@ -47,6 +53,6 @@ public:
     }
 };
 
-JS_EXPORT_PRIVATE NumberObject* constructNumber(ExecState*, JSGlobalObject*, JSValue);
+JS_EXPORT_PRIVATE NumberObject* constructNumber(JSGlobalObject*, JSValue);
 
 } // namespace JSC

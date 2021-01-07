@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2019 Apple Inc. All rights reserved.
  * Copyright (C) 2015 Yusuke Suzuki <utatane.tea@gmail.com>.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,10 +32,10 @@
 namespace JSC {
 
 // In the ES6 spec, Symbol.prototype object is an ordinary JS object, not one of the symbol wrapper object instance.
-class SymbolPrototype : public JSNonFinalObject {
+class SymbolPrototype final : public JSNonFinalObject {
 public:
     typedef JSNonFinalObject Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
     static SymbolPrototype* create(VM& vm, JSGlobalObject* globalObject, Structure* structure)
     {

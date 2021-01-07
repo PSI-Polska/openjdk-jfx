@@ -49,7 +49,7 @@ class Document;
 class ScriptExecutionContext;
 class SharedBuffer;
 
-class CDM : public RefCounted<CDM>, private ContextDestructionObserver {
+class CDM : public RefCounted<CDM>, public CanMakeWeakPtr<CDM>, private ContextDestructionObserver {
 public:
     static bool supportsKeySystem(const String&);
     static bool isPersistentType(MediaKeySessionType);
@@ -57,7 +57,7 @@ public:
     static Ref<CDM> create(Document&, const String& keySystem);
     ~CDM();
 
-    using SupportedConfigurationCallback = WTF::Function<void(std::optional<MediaKeySystemConfiguration>)>;
+    using SupportedConfigurationCallback = WTF::Function<void(Optional<MediaKeySystemConfiguration>)>;
     void getSupportedConfiguration(MediaKeySystemConfiguration&& candidateConfiguration, SupportedConfigurationCallback&&);
 
     const String& keySystem() const { return m_keySystem; }
@@ -66,14 +66,14 @@ public:
     RefPtr<CDMInstance> createInstance();
     bool supportsServerCertificates() const;
     bool supportsSessions() const;
-    bool supportsInitDataType(const AtomicString&) const;
+    bool supportsInitDataType(const AtomString&) const;
 
-    RefPtr<SharedBuffer> sanitizeInitData(const AtomicString& initDataType, const SharedBuffer&);
-    bool supportsInitData(const AtomicString& initDataType, const SharedBuffer&);
+    RefPtr<SharedBuffer> sanitizeInitData(const AtomString& initDataType, const SharedBuffer&);
+    bool supportsInitData(const AtomString& initDataType, const SharedBuffer&);
 
     RefPtr<SharedBuffer> sanitizeResponse(const SharedBuffer&);
 
-    std::optional<String> sanitizeSessionId(const String& sessionId);
+    Optional<String> sanitizeSessionId(const String& sessionId);
 
     String storageDirectory() const;
 
@@ -98,16 +98,13 @@ private:
     };
 
     void doSupportedConfigurationStep(MediaKeySystemConfiguration&& candidateConfiguration, MediaKeysRestrictions&&, SupportedConfigurationCallback&&);
-    std::optional<MediaKeySystemConfiguration>  getSupportedConfiguration(const MediaKeySystemConfiguration& candidateConfiguration, MediaKeysRestrictions&);
-    std::optional<Vector<MediaKeySystemMediaCapability>> getSupportedCapabilitiesForAudioVideoType(AudioVideoType, const Vector<MediaKeySystemMediaCapability>& requestedCapabilities, const MediaKeySystemConfiguration& partialConfiguration, MediaKeysRestrictions&);
-
-    WeakPtr<CDM> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(*this); }
+    Optional<MediaKeySystemConfiguration>  getSupportedConfiguration(const MediaKeySystemConfiguration& candidateConfiguration, MediaKeysRestrictions&);
+    Optional<Vector<MediaKeySystemMediaCapability>> getSupportedCapabilitiesForAudioVideoType(AudioVideoType, const Vector<MediaKeySystemMediaCapability>& requestedCapabilities, const MediaKeySystemConfiguration& partialConfiguration, MediaKeysRestrictions&);
 
     using ConsentStatusCallback = WTF::Function<void(ConsentStatus, MediaKeySystemConfiguration&&, MediaKeysRestrictions&&)>;
     void getConsentStatus(MediaKeySystemConfiguration&& accumulatedConfiguration, MediaKeysRestrictions&&, ConsentStatusCallback&&);
     String m_keySystem;
     std::unique_ptr<CDMPrivate> m_private;
-    WeakPtrFactory<CDM> m_weakPtrFactory;
 };
 
 }

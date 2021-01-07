@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007, 2013 Alexey Proskuryakov (ap@nypop.com)
+ * Copyright (C) 2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +33,7 @@
 #include "Frame.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMWindowCustom.h"
-#include "JSMainThreadExecState.h"
+#include "JSExecState.h"
 #include "Page.h"
 #include "PageConsoleClient.h"
 #include <JavaScriptCore/JSLock.h>
@@ -42,7 +43,7 @@ namespace WebCore {
 
 using namespace JSC;
 
-ExceptionOr<Ref<JSCustomXPathNSResolver>> JSCustomXPathNSResolver::create(ExecState& state, JSValue value)
+ExceptionOr<Ref<JSCustomXPathNSResolver>> JSCustomXPathNSResolver::create(JSGlobalObject& lexicalGlobalObject, JSValue value)
 {
     if (value.isUndefinedOrNull())
         return Exception { TypeError };
@@ -51,7 +52,8 @@ ExceptionOr<Ref<JSCustomXPathNSResolver>> JSCustomXPathNSResolver::create(ExecSt
     if (!resolverObject)
         return Exception { TypeMismatchError };
 
-    return adoptRef(*new JSCustomXPathNSResolver(state.vm(), resolverObject, asJSDOMWindow(state.vmEntryGlobalObject())));
+    VM& vm = lexicalGlobalObject.vm();
+    return adoptRef(*new JSCustomXPathNSResolver(vm, resolverObject, asJSDOMWindow(&lexicalGlobalObject)));
 }
 
 JSCustomXPathNSResolver::JSCustomXPathNSResolver(VM& vm, JSObject* customResolver, JSDOMWindow* globalObject)
@@ -68,16 +70,17 @@ String JSCustomXPathNSResolver::lookupNamespaceURI(const String& prefix)
 
     JSLockHolder lock(commonVM());
 
-    ExecState* exec = m_globalObject->globalExec();
+    JSGlobalObject* lexicalGlobalObject = m_globalObject.get();
+    VM& vm = lexicalGlobalObject->vm();
 
-    JSValue function = m_customResolver->get(exec, Identifier::fromString(exec, "lookupNamespaceURI"));
+    JSValue function = m_customResolver->get(lexicalGlobalObject, Identifier::fromString(vm, "lookupNamespaceURI"));
     CallData callData;
-    CallType callType = getCallData(function, callData);
+    CallType callType = getCallData(vm, function, callData);
     if (callType == CallType::None) {
-        callType = m_customResolver->methodTable()->getCallData(m_customResolver.get(), callData);
+        callType = m_customResolver->methodTable(vm)->getCallData(m_customResolver.get(), callData);
         if (callType == CallType::None) {
             if (PageConsoleClient* console = m_globalObject->wrapped().console())
-                console->addMessage(MessageSource::JS, MessageLevel::Error, ASCIILiteral("XPathNSResolver does not have a lookupNamespaceURI method."));
+                console->addMessage(MessageSource::JS, MessageLevel::Error, "XPathNSResolver does not have a lookupNamespaceURI method."_s);
             return String();
         }
         function = m_customResolver.get();
@@ -86,18 +89,18 @@ String JSCustomXPathNSResolver::lookupNamespaceURI(const String& prefix)
     Ref<JSCustomXPathNSResolver> protectedThis(*this);
 
     MarkedArgumentBuffer args;
-    args.append(jsStringWithCache(exec, prefix));
+    args.append(jsStringWithCache(lexicalGlobalObject, prefix));
     ASSERT(!args.hasOverflowed());
 
     NakedPtr<JSC::Exception> exception;
-    JSValue retval = JSMainThreadExecState::call(exec, function, callType, callData, m_customResolver.get(), args, exception);
+    JSValue retval = JSExecState::call(lexicalGlobalObject, function, callType, callData, m_customResolver.get(), args, exception);
 
     String result;
     if (exception)
-        reportException(exec, exception);
+        reportException(lexicalGlobalObject, exception);
     else {
         if (!retval.isUndefinedOrNull())
-            result = retval.toWTFString(exec);
+            result = retval.toWTFString(lexicalGlobalObject);
     }
 
     return result;

@@ -36,14 +36,32 @@ function shieldingPromiseResolve(result)
     return promise;
 }
 
+function promiseInvokeOrNoopMethodNoCatch(object, method, args)
+{
+    "use strict";
+
+    if (method === @undefined)
+        return @Promise.@resolve();
+    return @shieldingPromiseResolve(method.@apply(object, args));
+}
+
 function promiseInvokeOrNoopNoCatch(object, key, args)
 {
     "use strict";
 
-    const method = object[key];
-    if (method === @undefined)
-        return @Promise.@resolve();
-    return @shieldingPromiseResolve(method.@apply(object, args));
+    return @promiseInvokeOrNoopMethodNoCatch(object, object[key], args);
+}
+
+function promiseInvokeOrNoopMethod(object, method, args)
+{
+    "use strict";
+
+    try {
+        return @promiseInvokeOrNoopMethodNoCatch(object, method, args);
+    }
+    catch(error) {
+        return @Promise.@reject(error);
+    }
 }
 
 function promiseInvokeOrNoop(object, key, args)
@@ -56,7 +74,6 @@ function promiseInvokeOrNoop(object, key, args)
     catch(error) {
         return @Promise.@reject(error);
     }
-
 }
 
 function promiseInvokeOrFallbackOrNoop(object, key1, args1, key2, args2)
@@ -81,10 +98,10 @@ function validateAndNormalizeQueuingStrategy(size, highWaterMark)
     if (size !== @undefined && typeof size !== "function")
         @throwTypeError("size parameter must be a function");
 
-    const normalizedStrategy = { };
-
-    normalizedStrategy.size = size;
-    normalizedStrategy.highWaterMark = @toNumber(highWaterMark);
+    const normalizedStrategy = {
+        size: size,
+        highWaterMark: @toNumber(highWaterMark)
+    };
 
     if (@isNaN(normalizedStrategy.highWaterMark) || normalizedStrategy.highWaterMark < 0)
         @throwRangeError("highWaterMark value is negative or not a number");

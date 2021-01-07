@@ -49,13 +49,13 @@ std::unique_ptr<DisplayList> Replayer::replay(const FloatRect& initialClip, bool
 
     std::unique_ptr<DisplayList> replayList;
     if (UNLIKELY(trackReplayList))
-        replayList = std::make_unique<DisplayList>();
+        replayList = makeUnique<DisplayList>();
 
     size_t numItems = m_displayList.itemCount();
     for (size_t i = 0; i < numItems; ++i) {
         auto& item = m_displayList.list()[i].get();
 
-        if (is<DrawingItem>(item)) {
+        if (!initialClip.isZero() && is<DrawingItem>(item)) {
             const DrawingItem& drawingItem = downcast<DrawingItem>(item);
             if (drawingItem.extentKnown() && !drawingItem.extent().intersects(initialClip)) {
                 LOG_WITH_STREAM(DisplayLists, stream << "skipping " << i << " " << item);

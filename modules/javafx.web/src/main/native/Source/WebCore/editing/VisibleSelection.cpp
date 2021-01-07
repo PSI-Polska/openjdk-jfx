@@ -30,6 +30,9 @@
 #include "Editing.h"
 #include "Element.h"
 #include "HTMLInputElement.h"
+#include "Settings.h"
+#include "ShadowRoot.h"
+#include "StaticRange.h"
 #include "TextIterator.h"
 #include "VisibleUnits.h"
 #include <stdio.h>
@@ -91,6 +94,16 @@ VisibleSelection::VisibleSelection(const Range& range, EAffinity affinity, bool 
     , m_affinity(affinity)
     , m_isDirectional(isDirectional)
 {
+    validate();
+}
+
+VisibleSelection::VisibleSelection(const StaticRange& staticRange, EAffinity affinity, bool isDirectional)
+    : m_base(createLegacyEditingPosition(staticRange.startContainer(), staticRange.startOffset()))
+    , m_extent(createLegacyEditingPosition(staticRange.endContainer(), staticRange.endOffset()))
+    , m_affinity(affinity)
+    , m_isDirectional(isDirectional)
+{
+    ASSERT(&staticRange.startContainer()->treeScope() == &staticRange.endContainer()->treeScope());
     validate();
 }
 
@@ -219,7 +232,7 @@ static RefPtr<Range> makeSearchRange(const Position& position)
     if (result.hasException())
         return nullptr;
 
-    return WTFMove(searchRange);
+    return searchRange;
 }
 
 bool VisibleSelection::isAll(EditingBoundaryCrossingRule rule) const
@@ -468,7 +481,7 @@ void VisibleSelection::setWithoutValidation(const Position& base, const Position
     m_selectionType = base == extent ? CaretSelection : RangeSelection;
 }
 
-static Position adjustPositionForEnd(const Position& currentPosition, Node* startContainerNode)
+Position VisibleSelection::adjustPositionForEnd(const Position& currentPosition, Node* startContainerNode)
 {
     TreeScope& treeScope = startContainerNode->treeScope();
 
@@ -486,7 +499,7 @@ static Position adjustPositionForEnd(const Position& currentPosition, Node* star
     return Position();
 }
 
-static Position adjustPositionForStart(const Position& currentPosition, Node* endContainerNode)
+Position VisibleSelection::adjustPositionForStart(const Position& currentPosition, Node* endContainerNode)
 {
     TreeScope& treeScope = endContainerNode->treeScope();
 
@@ -504,13 +517,37 @@ static Position adjustPositionForStart(const Position& currentPosition, Node* en
     return Position();
 }
 
+static bool isInUserAgentShadowRootOrHasEditableShadowAncestor(Node& node)
+{
+    auto* shadowRoot = node.containingShadowRoot();
+    if (!shadowRoot)
+        return false;
+
+    if (shadowRoot->mode() == ShadowRootMode::UserAgent)
+        return true;
+
+    for (RefPtr<Node> currentNode = &node; currentNode; currentNode = currentNode->parentOrShadowHostNode()) {
+        if (currentNode->hasEditableStyle())
+            return true;
+    }
+    return false;
+}
+
 void VisibleSelection::adjustSelectionToAvoidCrossingShadowBoundaries()
 {
     if (m_base.isNull() || m_start.isNull() || m_end.isNull())
         return;
 
-    if (&m_start.anchorNode()->treeScope() == &m_end.anchorNode()->treeScope())
+    auto startNode = makeRef(*m_start.anchorNode());
+    auto endNode = makeRef(*m_end.anchorNode());
+    if (&startNode->treeScope() == &endNode->treeScope())
         return;
+
+    if (startNode->document().settings().selectionAcrossShadowBoundariesEnabled()) {
+        if (!isInUserAgentShadowRootOrHasEditableShadowAncestor(startNode)
+            && !isInUserAgentShadowRootOrHasEditableShadowAncestor(endNode))
+            return;
+    }
 
     if (m_baseIsFirst) {
         m_extent = adjustPositionForEnd(m_end, m_start.containerNode());
@@ -519,8 +556,6 @@ void VisibleSelection::adjustSelectionToAvoidCrossingShadowBoundaries()
         m_extent = adjustPositionForStart(m_start, m_end.containerNode());
         m_start = m_extent;
     }
-
-    ASSERT(&m_start.anchorNode()->treeScope() == &m_end.anchorNode()->treeScope());
 }
 
 void VisibleSelection::adjustSelectionToAvoidCrossingEditingBoundaries()

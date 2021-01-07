@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,6 +35,7 @@
 #include "InlineCallFrameSet.h"
 #include "JSCast.h"
 #include "ProfilerCompilation.h"
+#include "RecordedStatuses.h"
 #include <wtf/Bag.h>
 #include <wtf/Noncopyable.h>
 
@@ -47,7 +48,7 @@ class TrackedReferences;
 namespace DFG {
 
 struct Node;
-struct Plan;
+class Plan;
 
 // CommonData holds the set of data that both DFG and FTL code blocks need to know
 // about themselves.
@@ -82,7 +83,9 @@ public:
     CallSiteIndex addCodeOrigin(CodeOrigin);
     CallSiteIndex addUniqueCallSiteIndex(CodeOrigin);
     CallSiteIndex lastCallSite() const;
-    void removeCallSiteIndex(CallSiteIndex);
+
+    DisposableCallSiteIndex addDisposableCallSiteIndex(CodeOrigin);
+    void removeDisposableCallSiteIndex(DisposableCallSiteIndex);
 
     void shrinkToFit();
 
@@ -91,14 +94,14 @@ public:
     void installVMTrapBreakpoints(CodeBlock* owner);
     bool isVMTrapBreakpoint(void* address);
 
-    CatchEntrypointData* catchOSREntryDataForBytecodeIndex(unsigned bytecodeIndex)
+    CatchEntrypointData* catchOSREntryDataForBytecodeIndex(BytecodeIndex bytecodeIndex)
     {
-        return tryBinarySearch<CatchEntrypointData, unsigned>(
+        return tryBinarySearch<CatchEntrypointData, BytecodeIndex>(
             catchEntrypoints, catchEntrypoints.size(), bytecodeIndex,
             [] (const CatchEntrypointData* item) { return item->bytecodeIndex; });
     }
 
-    void appendCatchEntrypoint(unsigned bytecodeIndex, void* machineCode, Vector<FlushFormat>&& argumentFormats)
+    void appendCatchEntrypoint(BytecodeIndex bytecodeIndex, MacroAssemblerCodePtr<ExceptionHandlerPtrTag> machineCode, Vector<FlushFormat>&& argumentFormats)
     {
         catchEntrypoints.append(CatchEntrypointData { machineCode,  WTFMove(argumentFormats), bytecodeIndex });
     }
@@ -114,17 +117,20 @@ public:
 
     static ptrdiff_t frameRegisterCountOffset() { return OBJECT_OFFSETOF(CommonData, frameRegisterCount); }
 
+    void clearWatchpoints();
+
     RefPtr<InlineCallFrameSet> inlineCallFrames;
     Vector<CodeOrigin, 0, UnsafeVectorOverflow> codeOrigins;
 
     Vector<Identifier> dfgIdentifiers;
     Vector<WeakReferenceTransition> transitions;
     Vector<WriteBarrier<JSCell>> weakReferences;
-    Vector<WriteBarrier<Structure>> weakStructureReferences;
+    Vector<StructureID> weakStructureReferences;
     Vector<CatchEntrypointData> catchEntrypoints;
     Bag<CodeBlockJettisoningWatchpoint> watchpoints;
     Bag<AdaptiveStructureWatchpoint> adaptiveStructureWatchpoints;
     Bag<AdaptiveInferredPropertyValueWatchpoint> adaptiveInferredPropertyValueWatchpoints;
+    RecordedStatuses recordedStatuses;
     Vector<JumpReplacement> jumpReplacements;
 
     ScratchBuffer* catchOSREntryBuffer;

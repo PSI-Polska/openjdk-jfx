@@ -32,6 +32,7 @@
 #include "WasmEmbedder.h"
 #include "WasmModuleInformation.h"
 #include <wtf/Bag.h>
+#include <wtf/CrossThreadCopier.h>
 #include <wtf/SharedTask.h>
 #include <wtf/ThreadSafeRefCounted.h>
 #include <wtf/Vector.h>
@@ -50,11 +51,10 @@ public:
     using CompletionTask = RefPtr<SharedTask<CallbackType>>;
 
     static CompletionTask dontFinalize() { return createSharedTask<CallbackType>([](Plan&) { }); }
-    Plan(Context*, Ref<ModuleInformation>, CompletionTask&&, CreateEmbedderWrapper&&, ThrowWasmException);
     Plan(Context*, Ref<ModuleInformation>, CompletionTask&&);
 
     // Note: This constructor should only be used if you are not actually building a module e.g. validation/function tests
-    JS_EXPORT_PRIVATE Plan(Context*, const uint8_t*, size_t, CompletionTask&&);
+    JS_EXPORT_PRIVATE Plan(Context*, CompletionTask&&);
     virtual JS_EXPORT_PRIVATE ~Plan();
 
     // If you guarantee the ordering here, you can rely on FIFO of the
@@ -64,9 +64,9 @@ public:
     void setMode(MemoryMode mode) { m_mode = mode; }
     MemoryMode mode() const { return m_mode; }
 
-    const String& errorMessage() const { return m_errorMessage; }
+    String errorMessage() const { return crossThreadCopy(m_errorMessage); }
 
-    bool WARN_UNUSED_RETURN failed() const { return !errorMessage().isNull(); }
+    bool WARN_UNUSED_RETURN failed() const { return !m_errorMessage.isNull(); }
     virtual bool hasWork() const = 0;
     enum CompilationEffort { All, Partial };
     virtual void work(CompilationEffort = All) = 0;
@@ -87,11 +87,6 @@ protected:
 
     Vector<std::pair<Context*, CompletionTask>, 1> m_completionTasks;
 
-    CreateEmbedderWrapper m_createEmbedderWrapper;
-    ThrowWasmException m_throwWasmException { nullptr };
-
-    const uint8_t* m_source;
-    const size_t m_sourceLength;
     String m_errorMessage;
     MemoryMode m_mode { MemoryMode::BoundsChecking };
     Lock m_lock;

@@ -35,13 +35,17 @@
 #include "DOMWrapperWorld.h"
 #include "EventNames.h"
 #include "HTMLBodyElement.h"
+#include "HTMLHtmlElement.h"
 #include "InspectorInstrumentation.h"
 #include "JSEventListener.h"
+#include "JSLazyEventListener.h"
+#include "Quirks.h"
 #include "ScriptController.h"
 #include "ScriptDisallowedScope.h"
 #include "Settings.h"
 #include "WebKitAnimationEvent.h"
 #include "WebKitTransitionEvent.h"
+#include <wtf/IsoMallocInlines.h>
 #include <wtf/MainThread.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/Ref.h>
@@ -51,41 +55,43 @@
 
 namespace WebCore {
 
-using namespace WTF;
+WTF_MAKE_ISO_ALLOCATED_IMPL(EventTarget);
+WTF_MAKE_ISO_ALLOCATED_IMPL(EventTargetWithInlineData);
 
 bool EventTarget::isNode() const
 {
     return false;
 }
 
-bool EventTarget::addEventListener(const AtomicString& eventType, Ref<EventListener>&& listener, const AddEventListenerOptions& options)
+bool EventTarget::isPaymentRequest() const
 {
+    return false;
+}
+
+bool EventTarget::addEventListener(const AtomString& eventType, Ref<EventListener>&& listener, const AddEventListenerOptions& options)
+{
+#if ASSERT_ENABLED
+    listener->checkValidityForEventTarget(*this);
+#endif
+
     auto passive = options.passive;
 
-    if (!passive.has_value() && eventNames().isTouchScrollBlockingEventType(eventType)) {
-        if (is<DOMWindow>(*this)) {
-            auto& window = downcast<DOMWindow>(*this);
-            if (auto* document = window.document())
-                passive = document->settings().passiveTouchListenersAsDefaultOnDocument();
-        } else if (is<Node>(*this)) {
-            auto& node = downcast<Node>(*this);
-            if (is<Document>(node) || node.document().documentElement() == &node || node.document().body() == &node)
-                passive = node.document().settings().passiveTouchListenersAsDefaultOnDocument();
-        }
-    }
+    if (!passive.hasValue() && Quirks::shouldMakeEventListenerPassive(*this, eventType, listener.get()))
+        passive = true;
 
     bool listenerCreatedFromScript = listener->type() == EventListener::JSEventListenerType && !listener->wasCreatedFromMarkup();
+    auto listenerRef = listener.copyRef();
 
-    if (!ensureEventTargetData().eventListenerMap.add(eventType, WTFMove(listener), { options.capture, passive.value_or(false), options.once }))
+    if (!ensureEventTargetData().eventListenerMap.add(eventType, WTFMove(listener), { options.capture, passive.valueOr(false), options.once }))
         return false;
 
     if (listenerCreatedFromScript)
-        InspectorInstrumentation::didAddEventListener(*this, eventType);
+        InspectorInstrumentation::didAddEventListener(*this, eventType, listenerRef.get(), options.capture);
 
     return true;
 }
 
-void EventTarget::addEventListenerForBindings(const AtomicString& eventType, RefPtr<EventListener>&& listener, AddEventListenerOptionsOrBoolean&& variant)
+void EventTarget::addEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&& listener, AddEventListenerOptionsOrBoolean&& variant)
 {
     if (!listener)
         return;
@@ -99,7 +105,7 @@ void EventTarget::addEventListenerForBindings(const AtomicString& eventType, Ref
     WTF::visit(visitor, variant);
 }
 
-void EventTarget::removeEventListenerForBindings(const AtomicString& eventType, RefPtr<EventListener>&& listener, ListenerOptionsOrBoolean&& variant)
+void EventTarget::removeEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&& listener, ListenerOptionsOrBoolean&& variant)
 {
     if (!listener)
         return;
@@ -113,7 +119,7 @@ void EventTarget::removeEventListenerForBindings(const AtomicString& eventType, 
     WTF::visit(visitor, variant);
 }
 
-bool EventTarget::removeEventListener(const AtomicString& eventType, EventListener& listener, const ListenerOptions& options)
+bool EventTarget::removeEventListener(const AtomString& eventType, EventListener& listener, const ListenerOptions& options)
 {
     auto* data = eventTargetData();
     if (!data)
@@ -124,7 +130,7 @@ bool EventTarget::removeEventListener(const AtomicString& eventType, EventListen
     return data->eventListenerMap.remove(eventType, listener, options.capture);
 }
 
-bool EventTarget::setAttributeEventListener(const AtomicString& eventType, RefPtr<EventListener>&& listener, DOMWrapperWorld& isolatedWorld)
+bool EventTarget::setAttributeEventListener(const AtomString& eventType, RefPtr<EventListener>&& listener, DOMWrapperWorld& isolatedWorld)
 {
     auto* existingListener = attributeEventListener(eventType, isolatedWorld);
     if (!listener) {
@@ -135,16 +141,21 @@ bool EventTarget::setAttributeEventListener(const AtomicString& eventType, RefPt
     if (existingListener) {
         InspectorInstrumentation::willRemoveEventListener(*this, eventType, *existingListener, false);
 
+#if ASSERT_ENABLED
+        listener->checkValidityForEventTarget(*this);
+#endif
+
+        auto listenerPointer = listener.copyRef();
         eventTargetData()->eventListenerMap.replace(eventType, *existingListener, listener.releaseNonNull(), { });
 
-        InspectorInstrumentation::didAddEventListener(*this, eventType);
+        InspectorInstrumentation::didAddEventListener(*this, eventType, *listenerPointer, false);
 
         return true;
     }
     return addEventListener(eventType, listener.releaseNonNull());
 }
 
-EventListener* EventTarget::attributeEventListener(const AtomicString& eventType, DOMWrapperWorld& isolatedWorld)
+EventListener* EventTarget::attributeEventListener(const AtomString& eventType, DOMWrapperWorld& isolatedWorld)
 {
     for (auto& eventListener : eventListeners(eventType)) {
         auto& listener = eventListener->callback();
@@ -159,7 +170,7 @@ EventListener* EventTarget::attributeEventListener(const AtomicString& eventType
     return nullptr;
 }
 
-bool EventTarget::hasActiveEventListeners(const AtomicString& eventType) const
+bool EventTarget::hasActiveEventListeners(const AtomString& eventType) const
 {
     auto* data = eventTargetData();
     return data && data->eventListenerMap.containsActive(eventType);
@@ -167,13 +178,13 @@ bool EventTarget::hasActiveEventListeners(const AtomicString& eventType) const
 
 ExceptionOr<bool> EventTarget::dispatchEventForBindings(Event& event)
 {
-    event.setUntrusted();
-
     if (!event.isInitialized() || event.isBeingDispatched())
         return Exception { InvalidStateError };
 
     if (!scriptExecutionContext())
         return false;
+
+    event.setUntrusted();
 
     dispatchEvent(event);
     return event.legacyReturnValue();
@@ -181,13 +192,16 @@ ExceptionOr<bool> EventTarget::dispatchEventForBindings(Event& event)
 
 void EventTarget::dispatchEvent(Event& event)
 {
+    // FIXME: We should always use EventDispatcher.
     ASSERT(event.isInitialized());
     ASSERT(!event.isBeingDispatched());
 
     event.setTarget(this);
     event.setCurrentTarget(this);
     event.setEventPhase(Event::AT_TARGET);
-    fireEventListeners(event);
+    event.resetBeforeDispatch();
+    fireEventListeners(event, EventInvokePhase::Capturing);
+    fireEventListeners(event, EventInvokePhase::Bubbling);
     event.resetAfterDispatch();
 }
 
@@ -195,7 +209,7 @@ void EventTarget::uncaughtExceptionInEventHandler()
 {
 }
 
-static const AtomicString& legacyType(const Event& event)
+static const AtomString& legacyType(const Event& event)
 {
     if (event.type() == eventNames().animationendEvent)
         return eventNames().webkitAnimationEndEvent;
@@ -216,7 +230,8 @@ static const AtomicString& legacyType(const Event& event)
     return nullAtom();
 }
 
-void EventTarget::fireEventListeners(Event& event)
+// https://dom.spec.whatwg.org/#concept-event-listener-invoke
+void EventTarget::fireEventListeners(Event& event, EventInvokePhase phase)
 {
     ASSERT_WITH_SECURITY_IMPLICATION(ScriptDisallowedScope::isEventAllowedInMainThread());
     ASSERT(event.isInitialized());
@@ -228,7 +243,7 @@ void EventTarget::fireEventListeners(Event& event)
     SetForScope<bool> firingEventListenersScope(data->isFiringEventListeners, true);
 
     if (auto* listenersVector = data->eventListenerMap.find(event.type())) {
-        fireEventListeners(event, *listenersVector);
+        innerInvokeEventListeners(event, *listenersVector, phase);
         return;
     }
 
@@ -236,12 +251,12 @@ void EventTarget::fireEventListeners(Event& event)
     if (!event.isTrusted())
         return;
 
-    const AtomicString& legacyTypeName = legacyType(event);
+    const AtomString& legacyTypeName = legacyType(event);
     if (!legacyTypeName.isNull()) {
         if (auto* legacyListenersVector = data->eventListenerMap.find(legacyTypeName)) {
-            AtomicString typeName = event.type();
+            AtomString typeName = event.type();
             event.setType(legacyTypeName);
-            fireEventListeners(event, *legacyListenersVector);
+            innerInvokeEventListeners(event, *legacyListenersVector, phase);
             event.setType(typeName);
         }
     }
@@ -249,7 +264,8 @@ void EventTarget::fireEventListeners(Event& event)
 
 // Intentionally creates a copy of the listeners vector to avoid event listeners added after this point from being run.
 // Note that removal still has an effect due to the removed field in RegisteredEventListener.
-void EventTarget::fireEventListeners(Event& event, EventListenerVector listeners)
+// https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
+void EventTarget::innerInvokeEventListeners(Event& event, EventListenerVector listeners, EventInvokePhase phase)
 {
     Ref<EventTarget> protectedThis(*this);
     ASSERT(!listeners.isEmpty());
@@ -257,17 +273,16 @@ void EventTarget::fireEventListeners(Event& event, EventListenerVector listeners
 
     auto& context = *scriptExecutionContext();
     bool contextIsDocument = is<Document>(context);
-    InspectorInstrumentationCookie willDispatchEventCookie;
     if (contextIsDocument)
-        willDispatchEventCookie = InspectorInstrumentation::willDispatchEvent(downcast<Document>(context), event, true);
+        InspectorInstrumentation::willDispatchEvent(downcast<Document>(context), event);
 
     for (auto& registeredListener : listeners) {
         if (UNLIKELY(registeredListener->wasRemoved()))
             continue;
 
-        if (event.eventPhase() == Event::CAPTURING_PHASE && !registeredListener->useCapture())
+        if (phase == EventInvokePhase::Capturing && !registeredListener->useCapture())
             continue;
-        if (event.eventPhase() == Event::BUBBLING_PHASE && registeredListener->useCapture())
+        if (phase == EventInvokePhase::Bubbling && registeredListener->useCapture())
             continue;
 
         if (InspectorInstrumentation::isEventListenerDisabled(*this, event.type(), registeredListener->callback(), registeredListener->useCapture()))
@@ -285,6 +300,10 @@ void EventTarget::fireEventListeners(Event& event, EventListenerVector listeners
         if (registeredListener->isPassive())
             event.setInPassiveListener(true);
 
+#if ASSERT_ENABLED
+        registeredListener->callback().checkValidityForEventTarget(*this);
+#endif
+
         InspectorInstrumentation::willHandleEvent(context, event, *registeredListener);
         registeredListener->callback().handleEvent(context, event);
         InspectorInstrumentation::didHandleEvent(context);
@@ -294,10 +313,17 @@ void EventTarget::fireEventListeners(Event& event, EventListenerVector listeners
     }
 
     if (contextIsDocument)
-        InspectorInstrumentation::didDispatchEvent(willDispatchEventCookie);
+        InspectorInstrumentation::didDispatchEvent(downcast<Document>(context), event);
 }
 
-const EventListenerVector& EventTarget::eventListeners(const AtomicString& eventType)
+Vector<AtomString> EventTarget::eventTypes()
+{
+    if (auto* data = eventTargetData())
+        return data->eventListenerMap.eventTypes();
+    return { };
+}
+
+const EventListenerVector& EventTarget::eventListeners(const AtomString& eventType)
 {
     auto* data = eventTargetData();
     auto* listenerVector = data ? data->eventListenerMap.find(eventType) : nullptr;
@@ -307,10 +333,16 @@ const EventListenerVector& EventTarget::eventListeners(const AtomicString& event
 
 void EventTarget::removeAllEventListeners()
 {
+    auto& threadData = threadGlobalData();
+    RELEASE_ASSERT(!threadData.isInRemoveAllEventListeners());
+
+    threadData.setIsInRemoveAllEventListeners(true);
+
     auto* data = eventTargetData();
-    if (!data)
-        return;
-    data->eventListenerMap.clear();
+    if (data)
+        data->eventListenerMap.clear();
+
+    threadData.setIsInRemoveAllEventListeners(false);
 }
 
 void EventTarget::visitJSEventListeners(JSC::SlotVisitor& visitor)

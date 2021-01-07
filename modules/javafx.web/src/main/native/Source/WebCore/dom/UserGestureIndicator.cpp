@@ -26,10 +26,13 @@
 #include "config.h"
 #include "UserGestureIndicator.h"
 
+#include "DOMWindow.h"
 #include "Document.h"
+#include "Frame.h"
 #include "ResourceLoadObserver.h"
 #include <wtf/MainThread.h>
 #include <wtf/NeverDestroyed.h>
+#include <wtf/Optional.h>
 
 namespace WebCore {
 
@@ -46,7 +49,7 @@ UserGestureToken::~UserGestureToken()
         observer(*this);
 }
 
-UserGestureIndicator::UserGestureIndicator(std::optional<ProcessingUserGestureState> state, Document* document, UserGestureType gestureType, ProcessInteractionStyle processInteractionStyle)
+UserGestureIndicator::UserGestureIndicator(Optional<ProcessingUserGestureState> state, Document* document, UserGestureType gestureType, ProcessInteractionStyle processInteractionStyle)
     : m_previousToken { currentToken() }
 {
     ASSERT(isMainThread());
@@ -54,15 +57,24 @@ UserGestureIndicator::UserGestureIndicator(std::optional<ProcessingUserGestureSt
     if (state)
         currentToken() = UserGestureToken::create(state.value(), gestureType);
 
-    if (document && currentToken()->processingUserGesture()) {
-        document->updateLastHandledUserGestureTimestamp(MonotonicTime::now());
+    if (document && currentToken()->processingUserGesture() && state) {
+        document->updateLastHandledUserGestureTimestamp(currentToken()->startTime());
         if (processInteractionStyle == ProcessInteractionStyle::Immediate)
             ResourceLoadObserver::shared().logUserInteractionWithReducedTimeResolution(document->topDocument());
         document->topDocument().setUserDidInteractWithPage(true);
+        if (auto* frame = document->frame()) {
+            if (!frame->hasHadUserInteraction()) {
+                for (; frame; frame = frame->tree().parent())
+                    frame->setHasHadUserInteraction();
+            }
+        }
+
+        if (auto* window = document->domWindow())
+            window->notifyActivated(currentToken()->startTime());
     }
 }
 
-UserGestureIndicator::UserGestureIndicator(RefPtr<UserGestureToken> token)
+UserGestureIndicator::UserGestureIndicator(RefPtr<UserGestureToken> token, UserGestureToken::GestureScope scope)
 {
     // Silently ignore UserGestureIndicators on non main threads.
     if (!isMainThread())
@@ -71,14 +83,21 @@ UserGestureIndicator::UserGestureIndicator(RefPtr<UserGestureToken> token)
     // It is only safe to use currentToken() on the main thread.
     m_previousToken = currentToken();
 
-    if (token)
+    if (token) {
+        token->setScope(scope);
         currentToken() = token;
+    }
 }
 
 UserGestureIndicator::~UserGestureIndicator()
 {
     if (!isMainThread())
         return;
+
+    if (auto token = currentToken()) {
+        token->resetDOMPasteAccess();
+        token->resetScope();
+    }
 
     currentToken() = m_previousToken;
 }

@@ -23,18 +23,21 @@
 
 #include "CommonVM.h"
 #include "JSDOMWindow.h"
-#include "ScriptController.h"
 #include "WebCoreJSClientData.h"
+#include "WindowProxy.h"
 #include <wtf/MainThread.h>
 
 
 namespace WebCore {
 using namespace JSC;
 
-DOMWrapperWorld::DOMWrapperWorld(JSC::VM& vm, bool isNormal)
+DOMWrapperWorld::DOMWrapperWorld(JSC::VM& vm, Type type, const String& name)
     : m_vm(vm)
-    , m_isNormal(isNormal)
+    , m_name(name)
+    , m_type(type)
 {
+    ASSERT(!name.isEmpty() || m_type == Type::Normal);
+
     VM::ClientData* clientData = m_vm.clientData;
     ASSERT(clientData);
     static_cast<JSVMClientData*>(clientData)->rememberWorld(*this);
@@ -47,8 +50,8 @@ DOMWrapperWorld::~DOMWrapperWorld()
     static_cast<JSVMClientData*>(clientData)->forgetWorld(*this);
 
     // These items are created lazily.
-    while (!m_scriptControllersWithWindowProxies.isEmpty())
-        (*m_scriptControllersWithWindowProxies.begin())->destroyWindowProxy(*this);
+    while (!m_jsWindowProxies.isEmpty())
+        (*m_jsWindowProxies.begin())->destroyJSWindowProxy(*this);
 }
 
 void DOMWrapperWorld::clearWrappers()
@@ -56,8 +59,8 @@ void DOMWrapperWorld::clearWrappers()
     m_wrappers.clear();
 
     // These items are created lazily.
-    while (!m_scriptControllersWithWindowProxies.isEmpty())
-        (*m_scriptControllersWithWindowProxies.begin())->destroyWindowProxy(*this);
+    while (!m_jsWindowProxies.isEmpty())
+        (*m_jsWindowProxies.begin())->destroyJSWindowProxy(*this);
 }
 
 DOMWrapperWorld& normalWorld(JSC::VM& vm)

@@ -25,9 +25,11 @@
 
 #pragma once
 
+#include "IterationKind.h"
+
 namespace JSC {
 
-enum Intrinsic {
+enum Intrinsic : uint8_t {
     // Call intrinsics.
     NoIntrinsic,
     AbsIntrinsic,
@@ -52,8 +54,30 @@ enum Intrinsic {
     ArrayPopIntrinsic,
     ArraySliceIntrinsic,
     ArrayIndexOfIntrinsic,
+    ArrayValuesIntrinsic,
+    ArrayKeysIntrinsic,
+    ArrayEntriesIntrinsic,
     CharCodeAtIntrinsic,
     CharAtIntrinsic,
+    DatePrototypeGetTimeIntrinsic,
+    DatePrototypeGetFullYearIntrinsic,
+    DatePrototypeGetUTCFullYearIntrinsic,
+    DatePrototypeGetMonthIntrinsic,
+    DatePrototypeGetUTCMonthIntrinsic,
+    DatePrototypeGetDateIntrinsic,
+    DatePrototypeGetUTCDateIntrinsic,
+    DatePrototypeGetDayIntrinsic,
+    DatePrototypeGetUTCDayIntrinsic,
+    DatePrototypeGetHoursIntrinsic,
+    DatePrototypeGetUTCHoursIntrinsic,
+    DatePrototypeGetMinutesIntrinsic,
+    DatePrototypeGetUTCMinutesIntrinsic,
+    DatePrototypeGetSecondsIntrinsic,
+    DatePrototypeGetUTCSecondsIntrinsic,
+    DatePrototypeGetMillisecondsIntrinsic,
+    DatePrototypeGetUTCMillisecondsIntrinsic,
+    DatePrototypeGetTimezoneOffsetIntrinsic,
+    DatePrototypeGetYearIntrinsic,
     FromCharCodeIntrinsic,
     PowIntrinsic,
     FloorIntrinsic,
@@ -69,8 +93,12 @@ enum Intrinsic {
     RegExpTestIntrinsic,
     RegExpTestFastIntrinsic,
     RegExpMatchFastIntrinsic,
+    ObjectCreateIntrinsic,
     ObjectGetPrototypeOfIntrinsic,
+    ObjectIsIntrinsic,
+    ObjectKeysIntrinsic,
     ReflectGetPrototypeOfIntrinsic,
+    StringPrototypeCodePointAtIntrinsic,
     StringPrototypeValueOfIntrinsic,
     StringPrototypeReplaceIntrinsic,
     StringPrototypeReplaceRegExpIntrinsic,
@@ -82,8 +110,11 @@ enum Intrinsic {
     RandomIntrinsic,
     FRoundIntrinsic,
     TruncIntrinsic,
+    TypedArrayValuesIntrinsic,
+    TypedArrayKeysIntrinsic,
+    TypedArrayEntriesIntrinsic,
     IsTypedArrayViewIntrinsic,
-    BoundThisNoArgsFunctionCallIntrinsic,
+    BoundFunctionCallIntrinsic,
     JSMapGetIntrinsic,
     JSMapHasIntrinsic,
     JSMapSetIntrinsic,
@@ -137,6 +168,23 @@ enum Intrinsic {
     CPURdtscIntrinsic,
     CPUCpuidIntrinsic,
     CPUPauseIntrinsic,
+
+    DataViewGetInt8,
+    DataViewGetUint8,
+    DataViewGetInt16,
+    DataViewGetUint16,
+    DataViewGetInt32,
+    DataViewGetUint32,
+    DataViewGetFloat32,
+    DataViewGetFloat64,
+    DataViewSetInt8,
+    DataViewSetUint8,
+    DataViewSetInt16,
+    DataViewSetUint16,
+    DataViewSetInt32,
+    DataViewSetUint32,
+    DataViewSetFloat32,
+    DataViewSetFloat64,
 };
 
 const char* intrinsicName(Intrinsic);

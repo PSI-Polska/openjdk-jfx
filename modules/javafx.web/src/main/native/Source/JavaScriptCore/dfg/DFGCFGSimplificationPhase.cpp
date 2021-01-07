@@ -106,7 +106,10 @@ public:
                             if (extremeLogging)
                                 m_graph.dump();
                             m_graph.dethread();
-                            mergeBlocks(block, targetBlock, oneBlock(jettisonedBlock));
+                            if (targetBlock == jettisonedBlock)
+                                mergeBlocks(block, targetBlock, noBlocks());
+                            else
+                                mergeBlocks(block, targetBlock, oneBlock(jettisonedBlock));
                         } else {
                             if (extremeLogging)
                                 m_graph.dump();
@@ -116,7 +119,8 @@ public:
                             ASSERT(terminal->isTerminal());
                             NodeOrigin boundaryNodeOrigin = terminal->origin;
 
-                            jettisonBlock(block, jettisonedBlock, boundaryNodeOrigin);
+                            if (targetBlock != jettisonedBlock)
+                                jettisonBlock(block, jettisonedBlock, boundaryNodeOrigin);
 
                             block->replaceTerminal(
                                 m_graph, SpecNone, Jump, boundaryNodeOrigin,
@@ -182,7 +186,7 @@ public:
 
                         Vector<BasicBlock*, 1> jettisonedBlocks;
                         for (BasicBlock* successor : terminal->successors()) {
-                            if (successor != targetBlock)
+                            if (successor != targetBlock && !jettisonedBlocks.contains(successor))
                                 jettisonedBlocks.append(successor);
                         }
 
@@ -299,7 +303,7 @@ private:
     void jettisonBlock(BasicBlock* block, BasicBlock* jettisonedBlock, NodeOrigin boundaryNodeOrigin)
     {
         for (size_t i = 0; i < jettisonedBlock->variablesAtHead.numberOfArguments(); ++i)
-            keepOperandAlive(block, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForArgument(i));
+            keepOperandAlive(block, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForArgumentIncludingThis(i));
         for (size_t i = 0; i < jettisonedBlock->variablesAtHead.numberOfLocals(); ++i)
             keepOperandAlive(block, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForLocal(i));
 
@@ -350,7 +354,7 @@ private:
             // different path than secondBlock.
 
             for (size_t i = 0; i < jettisonedBlock->variablesAtHead.numberOfArguments(); ++i)
-                keepOperandAlive(firstBlock, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForArgument(i));
+                keepOperandAlive(firstBlock, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForArgumentIncludingThis(i));
             for (size_t i = 0; i < jettisonedBlock->variablesAtHead.numberOfLocals(); ++i)
                 keepOperandAlive(firstBlock, jettisonedBlock, boundaryNodeOrigin, virtualRegisterForLocal(i));
         }

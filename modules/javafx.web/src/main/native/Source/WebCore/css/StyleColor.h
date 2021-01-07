@@ -33,6 +33,7 @@
 
 #include "CSSValueKeywords.h"
 #include "Color.h"
+#include <wtf/OptionSet.h>
 
 namespace WebCore {
 
@@ -50,9 +51,16 @@ public:
 
     const Color& resolve(const Color& currentColor) const { return m_currentColor ? currentColor : m_color; }
 
-    static Color colorFromKeyword(CSSValueID);
+    enum class Options : uint8_t {
+        ForVisitedLink = 1 << 0,
+        UseSystemAppearance = 1 << 1,
+        UseDarkAppearance = 1 << 2,
+        UseElevatedUserInterfaceLevel = 1 << 3
+    };
+
+    static Color colorFromKeyword(CSSValueID, OptionSet<Options>);
     static bool isColorKeyword(CSSValueID);
-    static bool isSystemColor(CSSValueID);
+    WEBCORE_EXPORT static bool isSystemColor(CSSValueID);
 
 private:
     Color m_color;

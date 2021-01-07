@@ -36,14 +36,15 @@ namespace WebCore {
 class HTMLMediaElement;
 
 class HTMLTrackElement final : public HTMLElement, public TextTrackClient {
+    WTF_MAKE_ISO_ALLOCATED(HTMLTrackElement);
 public:
     static Ref<HTMLTrackElement> create(const QualifiedName&, Document&);
 
-    const AtomicString& kind();
-    void setKind(const AtomicString&);
+    const AtomString& kind();
+    void setKind(const AtomString&);
 
-    const AtomicString& srclang() const;
-    const AtomicString& label() const;
+    const AtomString& srclang() const;
+    const AtomString& label() const;
     bool isDefault() const;
 
     enum ReadyState { NONE = 0, LOADING = 1, LOADED = 2, TRACK_ERROR = 3 };
@@ -57,13 +58,14 @@ public:
     enum LoadStatus { Failure, Success };
     void didCompleteLoad(LoadStatus);
 
-    const AtomicString& mediaElementCrossOriginAttribute() const;
+    RefPtr<HTMLMediaElement> mediaElement() const;
+    const AtomString& mediaElementCrossOriginAttribute() const;
 
 private:
     HTMLTrackElement(const QualifiedName&, Document&);
     virtual ~HTMLTrackElement();
 
-    void parseAttribute(const QualifiedName&, const AtomicString&) final;
+    void parseAttribute(const QualifiedName&, const AtomString&) final;
 
     InsertedIntoAncestorResult insertedIntoAncestor(InsertionType, ContainerNode&) final;
     void removedFromAncestor(RemovalType, ContainerNode&) final;
@@ -71,8 +73,6 @@ private:
     bool isURLAttribute(const Attribute&) const final;
 
     void loadTimerFired();
-
-    RefPtr<HTMLMediaElement> mediaElement() const;
 
     // TextTrackClient
     void textTrackModeChanged(TextTrack&) final;

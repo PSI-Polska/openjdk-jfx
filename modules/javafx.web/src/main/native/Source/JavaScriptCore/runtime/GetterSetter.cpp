@@ -33,47 +33,21 @@ namespace JSC {
 
 STATIC_ASSERT_IS_TRIVIALLY_DESTRUCTIBLE(GetterSetter);
 
-const ClassInfo GetterSetter::s_info = { "GetterSetter", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(GetterSetter) };
+const ClassInfo GetterSetter::s_info = { "GetterSetter", nullptr, nullptr, nullptr, CREATE_METHOD_TABLE(GetterSetter) };
 
 void GetterSetter::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
     GetterSetter* thisObject = jsCast<GetterSetter*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, info());
-    JSCell::visitChildren(thisObject, visitor);
+    Base::visitChildren(thisObject, visitor);
 
     visitor.append(thisObject->m_getter);
     visitor.append(thisObject->m_setter);
 }
 
-GetterSetter* GetterSetter::withGetter(VM& vm, JSGlobalObject* globalObject, JSObject* newGetter)
+JSValue callGetter(JSGlobalObject* globalObject, JSValue base, JSValue getterSetter)
 {
-    if (isGetterNull()) {
-        setGetter(vm, globalObject, newGetter);
-        return this;
-    }
-
-    GetterSetter* result = GetterSetter::create(vm, globalObject);
-    result->setGetter(vm, globalObject, newGetter);
-    result->setSetter(vm, globalObject, setter());
-    return result;
-}
-
-GetterSetter* GetterSetter::withSetter(VM& vm, JSGlobalObject* globalObject, JSObject* newSetter)
-{
-    if (isSetterNull()) {
-        setSetter(vm, globalObject, newSetter);
-        return this;
-    }
-
-    GetterSetter* result = GetterSetter::create(vm, globalObject);
-    result->setGetter(vm, globalObject, getter());
-    result->setSetter(vm, globalObject, newSetter);
-    return result;
-}
-
-JSValue callGetter(ExecState* exec, JSValue base, JSValue getterSetter)
-{
-    VM& vm = exec->vm();
+    VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
     // FIXME: Some callers may invoke get() without checking for an exception first.
     // We work around that by checking here.
@@ -83,19 +57,18 @@ JSValue callGetter(ExecState* exec, JSValue base, JSValue getterSetter)
 
     CallData callData;
     CallType callType = getter->methodTable(vm)->getCallData(getter, callData);
-    scope.release();
-    return call(exec, getter, callType, callData, base, ArgList());
+    RELEASE_AND_RETURN(scope, call(globalObject, getter, callType, callData, base, ArgList()));
 }
 
-bool callSetter(ExecState* exec, JSValue base, JSValue getterSetter, JSValue value, ECMAMode ecmaMode)
+bool callSetter(JSGlobalObject* globalObject, JSValue base, JSValue getterSetter, JSValue value, ECMAMode ecmaMode)
 {
-    VM& vm = exec->vm();
+    VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     GetterSetter* getterSetterObj = jsCast<GetterSetter*>(getterSetter);
 
     if (getterSetterObj->isSetterNull())
-        return typeError(exec, scope, ecmaMode == StrictMode, ASCIILiteral(ReadonlyPropertyWriteError));
+        return typeError(globalObject, scope, ecmaMode == StrictMode, ReadonlyPropertyWriteError);
 
     JSObject* setter = getterSetterObj->setter();
 
@@ -106,7 +79,7 @@ bool callSetter(ExecState* exec, JSValue base, JSValue getterSetter, JSValue val
     CallData callData;
     CallType callType = setter->methodTable(vm)->getCallData(setter, callData);
     scope.release();
-    call(exec, setter, callType, callData, base, args);
+    call(globalObject, setter, callType, callData, base, args);
     return true;
 }
 

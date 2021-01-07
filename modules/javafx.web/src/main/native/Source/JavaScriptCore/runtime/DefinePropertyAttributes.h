@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,12 +36,12 @@ public:
     static_assert(TrueTriState == 1, "TrueTriState is 1.");
     static_assert(MixedTriState == 2, "MixedTriState is 2.");
 
-    static const unsigned ConfigurableShift = 0;
-    static const unsigned EnumerableShift = 2;
-    static const unsigned WritableShift = 4;
-    static const unsigned ValueShift = 6;
-    static const unsigned GetShift = 7;
-    static const unsigned SetShift = 8;
+    static constexpr unsigned ConfigurableShift = 0;
+    static constexpr unsigned EnumerableShift = 2;
+    static constexpr unsigned WritableShift = 4;
+    static constexpr unsigned ValueShift = 6;
+    static constexpr unsigned GetShift = 7;
+    static constexpr unsigned SetShift = 8;
 
     DefinePropertyAttributes()
         : m_attributes(
@@ -99,10 +99,10 @@ public:
         return extractTriState(WritableShift) != MixedTriState;
     }
 
-    std::optional<bool> writable() const
+    Optional<bool> writable() const
     {
         if (!hasWritable())
-            return std::nullopt;
+            return WTF::nullopt;
         return extractTriState(WritableShift) == TrueTriState;
     }
 
@@ -111,10 +111,10 @@ public:
         return extractTriState(ConfigurableShift) != MixedTriState;
     }
 
-    std::optional<bool> configurable() const
+    Optional<bool> configurable() const
     {
         if (!hasConfigurable())
-            return std::nullopt;
+            return WTF::nullopt;
         return extractTriState(ConfigurableShift) == TrueTriState;
     }
 
@@ -123,10 +123,10 @@ public:
         return extractTriState(EnumerableShift) != MixedTriState;
     }
 
-    std::optional<bool> enumerable() const
+    Optional<bool> enumerable() const
     {
         if (!hasEnumerable())
-            return std::nullopt;
+            return WTF::nullopt;
         return extractTriState(EnumerableShift) == TrueTriState;
     }
 

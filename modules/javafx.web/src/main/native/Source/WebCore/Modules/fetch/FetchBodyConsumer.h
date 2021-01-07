@@ -54,7 +54,6 @@ public:
 
     RefPtr<SharedBuffer> takeData();
     RefPtr<JSC::ArrayBuffer> takeAsArrayBuffer();
-    Ref<Blob> takeAsBlob();
     String takeAsText();
 
     void setContentType(const String& contentType) { m_contentType = contentType; }
@@ -66,7 +65,7 @@ public:
     void resolve(Ref<DeferredPromise>&&, ReadableStream*);
     void resolveWithData(Ref<DeferredPromise>&&, const unsigned char*, unsigned);
 
-    void loadingFailed();
+    void loadingFailed(const Exception&);
     void loadingSucceeded();
 
     void setConsumePromise(Ref<DeferredPromise>&&);
@@ -75,6 +74,8 @@ public:
     void setAsLoading() { m_isLoading = true; }
 
 private:
+    Ref<Blob> takeAsBlob();
+
     Type m_type;
     String m_contentType;
     RefPtr<SharedBuffer> m_buffer;

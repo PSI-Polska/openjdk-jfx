@@ -3,6 +3,7 @@
  * Copyright (C) 2007 Justin Haygood (jhaygood@reaktix.com)
  * Copyright (C) 2016 Konstantin Tokavev <annulen@yandex.ru>
  * Copyright (C) 2016 Yusuke Suzuki <utatane.tea@gmail.com>
+ * Copyright (C) 2019 Oracle and/or its affiliates. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,16 +31,25 @@
  */
 
 #include "config.h"
-#include "MainThread.h"
+#include <pthread.h>
+#if HAVE(PTHREAD_NP_H)
+#include <pthread_np.h>
+#endif
 
 #include <wtf/RunLoop.h>
+#include <wtf/NeverDestroyed.h>
 #if USE(GLIB)
 #include <wtf/glib/RunLoopSourcePriority.h>
 #endif
 
 namespace WTF {
 
+#if !HAVE(PTHREAD_MAIN_NP)
+static pthread_t mainThread;
+#endif
+
 class MainThreadDispatcher {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     MainThreadDispatcher()
         : m_timer(RunLoop::main(), this, &MainThreadDispatcher::fired)
@@ -65,14 +75,26 @@ private:
 
 void initializeMainThreadPlatform()
 {
+#if !HAVE(PTHREAD_MAIN_NP)
+    mainThread = pthread_self();
+#endif
+}
+
+bool isMainThread()
+{
+#if HAVE(PTHREAD_MAIN_NP)
+    return pthread_main_np();
+#else
+    return pthread_equal(pthread_self(), mainThread);
+#endif
 }
 
 void scheduleDispatchFunctionsOnMainThread()
 {
     // Use a RunLoop::Timer instead of RunLoop::dispatch() to be able to use a different priority and
     // avoid the double queue because dispatchOnMainThread also queues the functions.
-    static MainThreadDispatcher dispatcher;
-    dispatcher.schedule();
+    static NeverDestroyed<MainThreadDispatcher> dispatcher;
+    dispatcher.get().schedule();
 }
 
 } // namespace WTF

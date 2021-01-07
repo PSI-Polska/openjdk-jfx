@@ -33,21 +33,19 @@
 #include "ScriptDebugServer.h"
 #include <wtf/Stopwatch.h>
 
-using namespace JSC;
-
 namespace Inspector {
 
+using namespace JSC;
+
 InspectorScriptProfilerAgent::InspectorScriptProfilerAgent(AgentContext& context)
-    : InspectorAgentBase(ASCIILiteral("ScriptProfiler"))
-    , m_frontendDispatcher(std::make_unique<ScriptProfilerFrontendDispatcher>(context.frontendRouter))
+    : InspectorAgentBase("ScriptProfiler"_s)
+    , m_frontendDispatcher(makeUnique<ScriptProfilerFrontendDispatcher>(context.frontendRouter))
     , m_backendDispatcher(ScriptProfilerBackendDispatcher::create(context.backendDispatcher, this))
     , m_environment(context.environment)
 {
 }
 
-InspectorScriptProfilerAgent::~InspectorScriptProfilerAgent()
-{
-}
+InspectorScriptProfilerAgent::~InspectorScriptProfilerAgent() = default;
 
 void InspectorScriptProfilerAgent::didCreateFrontendAndBackend(FrontendRouter*, BackendDispatcher*)
 {
@@ -66,7 +64,7 @@ void InspectorScriptProfilerAgent::willDestroyFrontendAndBackend(DisconnectReaso
     }
 }
 
-void InspectorScriptProfilerAgent::startTracking(ErrorString&, const bool* const includeSamples)
+void InspectorScriptProfilerAgent::startTracking(ErrorString&, const bool* includeSamples)
 {
     if (m_tracking)
         return;
@@ -90,7 +88,7 @@ void InspectorScriptProfilerAgent::startTracking(ErrorString&, const bool* const
 
     m_environment.scriptDebugServer().setProfilingClient(this);
 
-    m_frontendDispatcher->trackingStart(m_environment.executionStopwatch()->elapsedTime());
+    m_frontendDispatcher->trackingStart(m_environment.executionStopwatch()->elapsedTime().seconds());
 }
 
 void InspectorScriptProfilerAgent::stopTracking(ErrorString&)
@@ -111,7 +109,7 @@ bool InspectorScriptProfilerAgent::isAlreadyProfiling() const
     return m_activeEvaluateScript;
 }
 
-double InspectorScriptProfilerAgent::willEvaluateScript()
+Seconds InspectorScriptProfilerAgent::willEvaluateScript()
 {
     m_activeEvaluateScript = true;
 
@@ -126,37 +124,37 @@ double InspectorScriptProfilerAgent::willEvaluateScript()
     return m_environment.executionStopwatch()->elapsedTime();
 }
 
-void InspectorScriptProfilerAgent::didEvaluateScript(double startTime, ProfilingReason reason)
+void InspectorScriptProfilerAgent::didEvaluateScript(Seconds startTime, ProfilingReason reason)
 {
     m_activeEvaluateScript = false;
 
-    double endTime = m_environment.executionStopwatch()->elapsedTime();
+    Seconds endTime = m_environment.executionStopwatch()->elapsedTime();
 
     addEvent(startTime, endTime, reason);
 }
 
-static Inspector::Protocol::ScriptProfiler::EventType toProtocol(ProfilingReason reason)
+static Protocol::ScriptProfiler::EventType toProtocol(ProfilingReason reason)
 {
     switch (reason) {
     case ProfilingReason::API:
-        return Inspector::Protocol::ScriptProfiler::EventType::API;
+        return Protocol::ScriptProfiler::EventType::API;
     case ProfilingReason::Microtask:
-        return Inspector::Protocol::ScriptProfiler::EventType::Microtask;
+        return Protocol::ScriptProfiler::EventType::Microtask;
     case ProfilingReason::Other:
-        return Inspector::Protocol::ScriptProfiler::EventType::Other;
+        return Protocol::ScriptProfiler::EventType::Other;
     }
 
     ASSERT_NOT_REACHED();
-    return Inspector::Protocol::ScriptProfiler::EventType::Other;
+    return Protocol::ScriptProfiler::EventType::Other;
 }
 
-void InspectorScriptProfilerAgent::addEvent(double startTime, double endTime, ProfilingReason reason)
+void InspectorScriptProfilerAgent::addEvent(Seconds startTime, Seconds endTime, ProfilingReason reason)
 {
     ASSERT(endTime >= startTime);
 
-    auto event = Inspector::Protocol::ScriptProfiler::Event::create()
-        .setStartTime(startTime)
-        .setEndTime(endTime)
+    auto event = Protocol::ScriptProfiler::Event::create()
+        .setStartTime(startTime.seconds())
+        .setEndTime(endTime.seconds())
         .setType(toProtocol(reason))
         .release();
 
@@ -189,7 +187,7 @@ static Ref<Protocol::ScriptProfiler::Samples> buildSamples(VM& vm, Vector<Sampli
             frames->addItem(WTFMove(frameObject));
         }
         Ref<Protocol::ScriptProfiler::StackTrace> inspectorStackTrace = Protocol::ScriptProfiler::StackTrace::create()
-            .setTimestamp(stackTrace.timestamp)
+            .setTimestamp(stackTrace.timestamp.seconds())
             .setStackFrames(WTFMove(frames))
             .release();
         stackTraces->addItem(WTFMove(inspectorStackTrace));
@@ -203,11 +201,13 @@ static Ref<Protocol::ScriptProfiler::Samples> buildSamples(VM& vm, Vector<Sampli
 
 void InspectorScriptProfilerAgent::trackingComplete()
 {
+    auto timestamp = m_environment.executionStopwatch()->elapsedTime().seconds();
+
 #if ENABLE(SAMPLING_PROFILER)
     if (m_enabledSamplingProfiler) {
         VM& vm = m_environment.scriptDebugServer().vm();
         JSLockHolder lock(vm);
-        DeferGC deferGC(vm.heap);
+        DeferGC deferGC(vm.heap); // This is required because we will have raw pointers into the heap after we releaseStackTraces().
         SamplingProfiler* samplingProfiler = vm.samplingProfiler();
         RELEASE_ASSERT(samplingProfiler);
 
@@ -220,11 +220,11 @@ void InspectorScriptProfilerAgent::trackingComplete()
 
         m_enabledSamplingProfiler = false;
 
-        m_frontendDispatcher->trackingComplete(WTFMove(samples));
+        m_frontendDispatcher->trackingComplete(timestamp, WTFMove(samples));
     } else
-        m_frontendDispatcher->trackingComplete(nullptr);
+        m_frontendDispatcher->trackingComplete(timestamp, nullptr);
 #else
-    m_frontendDispatcher->trackingComplete(nullptr);
+    m_frontendDispatcher->trackingComplete(timestamp, nullptr);
 #endif // ENABLE(SAMPLING_PROFILER)
 }
 
@@ -244,16 +244,6 @@ void InspectorScriptProfilerAgent::stopSamplingWhenDisconnecting()
 
     m_enabledSamplingProfiler = false;
 #endif
-}
-
-void InspectorScriptProfilerAgent::programmaticCaptureStarted()
-{
-    m_frontendDispatcher->programmaticCaptureStarted();
-}
-
-void InspectorScriptProfilerAgent::programmaticCaptureStopped()
-{
-    m_frontendDispatcher->programmaticCaptureStopped();
 }
 
 } // namespace Inspector

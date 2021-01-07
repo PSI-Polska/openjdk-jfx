@@ -49,6 +49,7 @@ enum FontLoadTimingOverride { "Block", "Swap", "Failure" };
 
     [MayThrowException] void setTextAutosizingEnabled(boolean enabled);
     [MayThrowException] void setTextAutosizingWindowSizeOverride(long width, long height);
+    [MayThrowException] void setTextAutosizingUsesIdempotentMode(boolean enabled);
 
     // Media
     [MayThrowException] void setCanStartMedia(boolean enabled);
@@ -71,6 +72,7 @@ enum FontLoadTimingOverride { "Block", "Swap", "Failure" };
     [MayThrowException] void setPreferMIMETypeForImages(boolean preferMimeTypeForImage);
 
     // Other switches
+    [MayThrowException] void setUseDarkAppearance(boolean enabled);
     [MayThrowException] void setStorageBlockingPolicy(DOMString policy);
     [MayThrowException] void setImagesEnabled(boolean enabled);
     [MayThrowException] void setPDFImageCachingPolicy(DOMString policy);
@@ -79,19 +81,21 @@ enum FontLoadTimingOverride { "Block", "Swap", "Failure" };
     [MayThrowException] void setBackgroundShouldExtendBeyondPage(boolean hasExtendedBackground);
     [MayThrowException] void setScrollingTreeIncludesFrames(boolean enabled);
     [MayThrowException] void setAllowUnclampedScrollPosition(boolean allowUnclamped);
+    [MayThrowException] void setAnimatedImageDebugCanvasDrawingEnabled(boolean enable);
 
     [MayThrowException] void setMinimumTimerInterval(unrestricted double intervalInSeconds);
     [MayThrowException] void setAllowsInlineMediaPlayback(boolean allows);
     [MayThrowException] void setAllowsInlineMediaPlaybackAfterFullscreen(boolean allows);
     [MayThrowException] void setInlineMediaPlaybackRequiresPlaysInlineAttribute(boolean requires);
     [MayThrowException] void setFrameFlattening(FrameFlatteningValue frameFlattening);
+    [MayThrowException] void setIncompleteImageBorderEnabled(boolean enabled);
+    [MayThrowException] void setShouldDispatchSyntheticMouseEventsWhenModifyingSelection(boolean shouldDispatch);
+    [MayThrowException] void setShouldDispatchSyntheticMouseOutAfterSyntheticClick(boolean shouldDispatch);
 
     // RuntimeEnabledFeatures.
     void setIndexedDBWorkersEnabled(boolean enabled);
-    void setCSSGridLayoutEnabled(boolean enabled);
     void setWebGL2Enabled(boolean enabled);
     void setWebGPUEnabled(boolean enabled);
-    void setWebVREnabled(boolean enabled);
     void setScreenCaptureEnabled(boolean enabled);
 
     [MayThrowException] DOMString userInterfaceDirectionPolicy();
@@ -107,8 +111,13 @@ enum FontLoadTimingOverride { "Block", "Swap", "Failure" };
     attribute ForcedAccessibilityValue forcedColorsAreInvertedAccessibilityValue;
     attribute ForcedAccessibilityValue forcedDisplayIsMonochromeAccessibilityValue;
     attribute ForcedAccessibilityValue forcedPrefersReducedMotionAccessibilityValue;
+    attribute ForcedAccessibilityValue forcedSupportsHighDynamicRangeValue;
 
     [MayThrowException] void setShouldManageAudioSessionCategory(boolean should);
     [MayThrowException] void setCustomPasteboardDataEnabled(boolean enabled);
+
+    [EnabledAtRuntime=WebAnimations] boolean webAnimationsCSSIntegrationEnabled();
+
+    void setShouldDeactivateAudioSession(boolean shouldDeactivate);
 };
 

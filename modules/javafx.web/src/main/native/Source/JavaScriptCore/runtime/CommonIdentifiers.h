@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2003-2017 Apple Inc. All rights reserved.
+ *  Copyright (C) 2003-2019 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -28,48 +28,33 @@
 #define JSC_COMMON_IDENTIFIERS_EACH_PROPERTY_NAME(macro) \
     macro(Array) \
     macro(ArrayBuffer) \
-    macro(ArrayIterator) \
     macro(BYTES_PER_ELEMENT) \
     macro(BigInt) \
     macro(Boolean) \
     macro(Collator) \
-    macro(Credential) \
     macro(Date) \
     macro(DateTimeFormat) \
-    macro(DataTransferItem) \
-    macro(DataTransferItemList) \
     macro(Error) \
     macro(EvalError) \
     macro(Function) \
-    macro(GeneratorFunction) \
     macro(Infinity) \
     macro(Intl) \
-    macro(JSON) \
     macro(Loader) \
-    macro(Map)\
-    macro(MapIterator)\
-    macro(Math) \
+    macro(Map) \
     macro(NaN) \
     macro(Number) \
     macro(NumberFormat) \
     macro(Object) \
+    macro(PluralRules) \
     macro(Promise) \
-    macro(Proxy) \
-    macro(RangeError) \
-    macro(ReferenceError) \
     macro(Reflect) \
     macro(RegExp) \
-    macro(Set)\
-    macro(SetIterator)\
+    macro(RemotePlayback) \
+    macro(Set) \
     macro(SharedArrayBuffer) \
     macro(String) \
     macro(Symbol) \
-    macro(SyntaxError) \
-    macro(TypeError) \
-    macro(URIError) \
-    macro(UTC) \
-    macro(WeakMap)\
-    macro(WeakSet)\
+    macro(WeakRef) \
     macro(__defineGetter__) \
     macro(__defineSetter__) \
     macro(__lookupGetter__) \
@@ -79,11 +64,9 @@
     macro(anonymous) \
     macro(arguments) \
     macro(as) \
-    macro(assign) \
     macro(async) \
     macro(back) \
     macro(bind) \
-    macro(buffer) \
     macro(byteLength) \
     macro(byteOffset) \
     macro(bytecode) \
@@ -107,12 +90,14 @@
     macro(counters) \
     macro(day) \
     macro(defineProperty) \
+    macro(deref) \
     macro(description) \
     macro(descriptions) \
     macro(detail) \
     macro(displayName) \
     macro(done) \
     macro(dotAll) \
+    macro(entries) \
     macro(enumerable) \
     macro(era) \
     macro(eval) \
@@ -120,7 +105,6 @@
     macro(exec) \
     macro(executionCount) \
     macro(exitKind) \
-    macro(fetch) \
     macro(flags) \
     macro(forEach) \
     macro(formatMatcher) \
@@ -137,8 +121,8 @@
     macro(hash) \
     macro(header) \
     macro(hour) \
+    macro(hourCycle) \
     macro(hour12) \
-    macro(href) \
     macro(id) \
     macro(ignoreCase) \
     macro(ignorePunctuation) \
@@ -153,6 +137,7 @@
     macro(isWatchpoint) \
     macro(jettisonReason) \
     macro(join) \
+    macro(keys) \
     macro(lastIndex) \
     macro(length) \
     macro(line) \
@@ -182,7 +167,6 @@
     macro(propertyIsEnumerable) \
     macro(prototype) \
     macro(raw) \
-    macro(reload) \
     macro(replace) \
     macro(resolve) \
     macro(second) \
@@ -215,6 +199,7 @@
     macro(unicode) \
     macro(usage) \
     macro(value) \
+    macro(values) \
     macro(valueOf) \
     macro(weekday) \
     macro(writable) \
@@ -275,6 +260,7 @@
     macro(asyncIterator) \
     macro(iterator) \
     macro(match) \
+    macro(matchAll) \
     macro(replace) \
     macro(search) \
     macro(species) \
@@ -283,6 +269,16 @@
     macro(toStringTag) \
     macro(unscopables)
 
+#define JSC_PARSER_PRIVATE_NAMES(macro) \
+    macro(generator) \
+    macro(generatorState) \
+    macro(generatorValue) \
+    macro(generatorResumeMode) \
+    macro(generatorFrame) \
+    macro(meta) \
+    macro(starDefault) \
+    macro(undefined) \
+
 namespace JSC {
 
     class BuiltinNames;
@@ -290,7 +286,7 @@ namespace JSC {
     class CommonIdentifiers {
         WTF_MAKE_NONCOPYABLE(CommonIdentifiers); WTF_MAKE_FAST_ALLOCATED;
     private:
-        CommonIdentifiers(VM*);
+        CommonIdentifiers(VM&);
         ~CommonIdentifiers();
         friend class VM;
 
@@ -307,6 +303,10 @@ namespace JSC {
 
     public:
 
+#define JSC_IDENTIFIER_DECLARE_PARSER_PRIVATE_NAME(name) const Identifier name##PrivateName;
+        JSC_PARSER_PRIVATE_NAMES(JSC_IDENTIFIER_DECLARE_PARSER_PRIVATE_NAME)
+#undef JSC_IDENTIFIER_DECLARE_PARSER_PRIVATE_NAME
+
 #define JSC_IDENTIFIER_DECLARE_KEYWORD_NAME_GLOBAL(name) const Identifier name##Keyword;
         JSC_COMMON_IDENTIFIERS_EACH_KEYWORD(JSC_IDENTIFIER_DECLARE_KEYWORD_NAME_GLOBAL)
 #undef JSC_IDENTIFIER_DECLARE_KEYWORD_NAME_GLOBAL
@@ -319,8 +319,8 @@ namespace JSC {
         JSC_COMMON_PRIVATE_IDENTIFIERS_EACH_WELL_KNOWN_SYMBOL(JSC_IDENTIFIER_DECLARE_PRIVATE_WELL_KNOWN_SYMBOL_GLOBAL)
 #undef JSC_IDENTIFIER_DECLARE_PRIVATE_WELL_KNOWN_SYMBOL_GLOBAL
 
-        const Identifier* lookUpPrivateName(const Identifier&) const;
-        Identifier lookUpPublicName(const Identifier&) const;
+        SymbolImpl* lookUpPrivateName(const Identifier&) const;
+        Identifier getPublicName(VM&, SymbolImpl*) const;
 
         // Callers of this method should make sure that identifiers given to this method
         // survive the lifetime of CommonIdentifiers and related VM.

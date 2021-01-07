@@ -47,10 +47,10 @@ class CachedImage final : public CachedResource {
     friend class MemoryCache;
 
 public:
-    CachedImage(CachedResourceRequest&&, PAL::SessionID);
-    CachedImage(Image*, PAL::SessionID);
+    CachedImage(CachedResourceRequest&&, const PAL::SessionID&, const CookieJar*);
+    CachedImage(Image*, const PAL::SessionID&, const CookieJar*);
     // Constructor to use for manually cached images.
-    CachedImage(const URL&, Image*, PAL::SessionID, const String& domainForCachePartition);
+    CachedImage(const URL&, Image*, const PAL::SessionID&, const CookieJar*, const String& domainForCachePartition);
     virtual ~CachedImage();
 
     WEBCORE_EXPORT Image* image(); // Returns the nullImage() if the image is not available yet.
@@ -75,8 +75,10 @@ public:
         UsedSize,
         IntrinsicSize
     };
+    WEBCORE_EXPORT FloatSize imageSizeForRenderer(const RenderElement* renderer, SizeType = UsedSize) const;
     // This method takes a zoom multiplier that can be used to increase the natural size of the image by the zoom.
-    LayoutSize imageSizeForRenderer(const RenderElement*, float multiplier, SizeType = UsedSize); // returns the size of the complete image.
+    LayoutSize imageSizeForRenderer(const RenderElement*, float multiplier, SizeType = UsedSize) const; // returns the size of the complete image.
+    LayoutSize unclampedImageSizeForRenderer(const RenderElement* renderer, float multiplier, SizeType = UsedSize) const;
     void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio);
 
     bool isManuallyCached() const { return m_isManuallyCached; }
@@ -85,7 +87,9 @@ public:
 
     bool isOriginClean(SecurityOrigin*);
 
-    void addPendingImageDrawingClient(CachedImageClient&);
+    bool isClientWaitingForAsyncDecoding(CachedImageClient&) const;
+    void addClientWaitingForAsyncDecoding(CachedImageClient&);
+    void removeAllClientsWaitingForAsyncDecoding();
 
     void setForceUpdateImageDataEnabledForTesting(bool enabled) { m_forceUpdateImageDataEnabledForTesting =  enabled; }
 
@@ -141,6 +145,7 @@ private:
         String mimeType() const override { return !m_cachedImages.isEmpty() ? (*m_cachedImages.begin())->mimeType() : emptyString(); }
         long long expectedContentLength() const override { return !m_cachedImages.isEmpty() ? (*m_cachedImages.begin())->expectedContentLength() : 0; }
 
+        void encodedDataStatusChanged(const Image&, EncodedDataStatus) final;
         void decodedSizeChanged(const Image&, long long delta) final;
         void didDraw(const Image&) final;
 
@@ -151,6 +156,7 @@ private:
         HashSet<CachedImage*> m_cachedImages;
     };
 
+    void encodedDataStatusChanged(const Image&, EncodedDataStatus);
     void decodedSizeChanged(const Image&, long long delta);
     void didDraw(const Image&);
     bool canDestroyDecodedData(const Image&);
@@ -170,19 +176,21 @@ private:
     using ContainerContextRequests = HashMap<const CachedImageClient*, ContainerContext>;
     ContainerContextRequests m_pendingContainerContextRequests;
 
-    HashSet<CachedImageClient*> m_pendingImageDrawingClients;
+    HashSet<CachedImageClient*> m_clientsWaitingForAsyncDecoding;
 
     RefPtr<CachedImageObserver> m_imageObserver;
     RefPtr<Image> m_image;
-    MonotonicTime m_lastUpdateImageDataTime;
-    unsigned m_updateImageDataCount { 0 };
-
     std::unique_ptr<SVGImageCache> m_svgImageCache;
-    bool m_isManuallyCached { false };
-    bool m_shouldPaintBrokenImage { true };
-    bool m_forceUpdateImageDataEnabledForTesting { false };
+
+    MonotonicTime m_lastUpdateImageDataTime;
+
+    static constexpr unsigned maxUpdateImageDataCount = 4;
+    unsigned m_updateImageDataCount : 3;
+    bool m_isManuallyCached : 1;
+    bool m_shouldPaintBrokenImage : 1;
+    bool m_forceUpdateImageDataEnabledForTesting : 1;
 };
 
 } // namespace WebCore
 
-SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedImage, CachedResource::ImageResource)
+SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedImage, CachedResource::Type::ImageResource)

@@ -22,16 +22,20 @@
 #include "DOMWindowProperty.h"
 #include "NavigatorBase.h"
 #include "ScriptWrappable.h"
+#include "ShareData.h"
 #include "Supplementable.h"
+#include <wtf/IsoMalloc.h>
 
 namespace WebCore {
 
+class DeferredPromise;
 class DOMMimeTypeArray;
 class DOMPluginArray;
 
 class Navigator final : public NavigatorBase, public ScriptWrappable, public DOMWindowProperty, public Supplementable<Navigator> {
+    WTF_MAKE_ISO_ALLOCATED(Navigator);
 public:
-    static Ref<Navigator> create(ScriptExecutionContext& context, Frame& frame) { return adoptRef(*new Navigator(context, frame)); }
+    static Ref<Navigator> create(ScriptExecutionContext* context, DOMWindow& window) { return adoptRef(*new Navigator(context, window)); }
     virtual ~Navigator();
 
     String appVersion() const;
@@ -39,20 +43,33 @@ public:
     DOMMimeTypeArray& mimeTypes();
     bool cookieEnabled() const;
     bool javaEnabled() const;
-    String userAgent() const final;
+    const String& userAgent() const final;
+    String platform() const final;
+    void userAgentChanged();
     bool onLine() const final;
+    void share(ScriptExecutionContext&, ShareData, Ref<DeferredPromise>&&);
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     bool standalone() const;
 #endif
 
     void getStorageUpdates();
 
+#if ENABLE(POINTER_EVENTS)
+#if ENABLE(IOS_TOUCH_EVENTS) && !PLATFORM(MACCATALYST)
+    int maxTouchPoints() const { return 5; }
+#else
+    int maxTouchPoints() const { return 0; }
+#endif
+#endif
+
 private:
-    explicit Navigator(ScriptExecutionContext&, Frame&);
+    explicit Navigator(ScriptExecutionContext*, DOMWindow&);
 
     mutable RefPtr<DOMPluginArray> m_plugins;
     mutable RefPtr<DOMMimeTypeArray> m_mimeTypes;
+    mutable String m_userAgent;
+    mutable String m_platform;
 };
 
 }

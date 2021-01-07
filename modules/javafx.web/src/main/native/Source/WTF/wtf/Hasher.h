@@ -21,6 +21,7 @@
 #pragma once
 
 #include <wtf/Forward.h>
+#include <wtf/Optional.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/StringHasher.h>
 
@@ -28,6 +29,7 @@ namespace WTF {
 
 // Deprecated. Use Hasher instead.
 class IntegerHasher {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     void add(uint32_t integer)
     {
@@ -47,6 +49,7 @@ template<typename... Types> uint32_t computeHash(const Types&...);
 template<typename T, typename... OtherTypes> uint32_t computeHash(std::initializer_list<T>, std::initializer_list<OtherTypes>...);
 
 class Hasher {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     template<typename... Types> friend uint32_t computeHash(const Types&... values)
     {
@@ -139,10 +142,10 @@ template<typename T1, typename T2> void add(Hasher& hasher, const std::pair<T1, 
     add(hasher, pair.second);
 }
 
-template<typename T> void add(Hasher& hasher, const std::optional<T>& optional)
+template<typename T> void add(Hasher& hasher, const Optional<T>& optional)
 {
-    add(hasher, optional.has_value());
-    if (optional.has_value())
+    add(hasher, optional.hasValue());
+    if (optional.hasValue())
         add(hasher, optional.value());
 }
 

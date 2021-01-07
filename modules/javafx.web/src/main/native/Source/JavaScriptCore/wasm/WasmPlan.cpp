@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,8 +35,6 @@
 #include "WasmCallingConvention.h"
 #include "WasmFaultSignalHandler.h"
 #include "WasmMemory.h"
-#include "WasmModuleParser.h"
-#include "WasmValidate.h"
 #include <wtf/DataLog.h>
 #include <wtf/Locker.h>
 #include <wtf/MonotonicTime.h>
@@ -46,28 +44,16 @@
 namespace JSC { namespace Wasm {
 
 namespace WasmPlanInternal {
-static const bool verbose = false;
-}
-
-Plan::Plan(Context* context, Ref<ModuleInformation> info, CompletionTask&& task, CreateEmbedderWrapper&& createEmbedderWrapper, ThrowWasmException throwWasmException)
-    : m_moduleInformation(WTFMove(info))
-    , m_createEmbedderWrapper(WTFMove(createEmbedderWrapper))
-    , m_throwWasmException(throwWasmException)
-    , m_source(m_moduleInformation->source.data())
-    , m_sourceLength(m_moduleInformation->source.size())
-{
-    m_completionTasks.append(std::make_pair(context, WTFMove(task)));
+static constexpr bool verbose = false;
 }
 
 Plan::Plan(Context* context, Ref<ModuleInformation> info, CompletionTask&& task)
-    : Plan(context, WTFMove(info), WTFMove(task), nullptr, nullptr)
+    : m_moduleInformation(WTFMove(info))
 {
+    m_completionTasks.append(std::make_pair(context, WTFMove(task)));
 }
-
-Plan::Plan(Context* context, const uint8_t* source, size_t sourceLength, CompletionTask&& task)
-    : m_moduleInformation(adoptRef(*new ModuleInformation(Vector<uint8_t>())))
-    , m_source(source)
-    , m_sourceLength(sourceLength)
+Plan::Plan(Context* context, CompletionTask&& task)
+    : m_moduleInformation(ModuleInformation::create())
 {
     m_completionTasks.append(std::make_pair(context, WTFMove(task)));
 }
@@ -103,7 +89,7 @@ bool Plan::tryRemoveContextAndCancelIfLast(Context& context)
 {
     LockHolder locker(m_lock);
 
-    if (!ASSERT_DISABLED) {
+    if (ASSERT_ENABLED) {
         // We allow the first completion task to not have a Context.
         for (unsigned i = 1; i < m_completionTasks.size(); ++i)
             ASSERT(m_completionTasks[i].first);
@@ -126,7 +112,7 @@ bool Plan::tryRemoveContextAndCancelIfLast(Context& context)
 
     // FIXME: Make 0 index not so magical: https://bugs.webkit.org/show_bug.cgi?id=171395
     if (m_completionTasks.isEmpty() || (m_completionTasks.size() == 1 && !m_completionTasks[0].first)) {
-        fail(locker, ASCIILiteral("WebAssembly Plan was cancelled. If you see this error message please file a bug at bugs.webkit.org!"));
+        fail(locker, "WebAssembly Plan was cancelled. If you see this error message please file a bug at bugs.webkit.org!"_s);
         return true;
     }
 
@@ -135,6 +121,9 @@ bool Plan::tryRemoveContextAndCancelIfLast(Context& context)
 
 void Plan::fail(const AbstractLocker& locker, String&& errorMessage)
 {
+    if (failed())
+        return;
+    ASSERT(errorMessage);
     dataLogLnIf(WasmPlanInternal::verbose, "failing with message: ", errorMessage);
     m_errorMessage = WTFMove(errorMessage);
     complete(locker);

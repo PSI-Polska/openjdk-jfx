@@ -50,10 +50,10 @@ public:
 
     RegisteredSymbolImpl* asRegisteredSymbolImpl();
 
-    WTF_EXPORT_STRING_API static Ref<SymbolImpl> createNullSymbol();
-    WTF_EXPORT_STRING_API static Ref<SymbolImpl> create(StringImpl& rep);
+    WTF_EXPORT_PRIVATE static Ref<SymbolImpl> createNullSymbol();
+    WTF_EXPORT_PRIVATE static Ref<SymbolImpl> create(StringImpl& rep);
 
-    class StaticSymbolImpl : private StringImplShape {
+    class StaticSymbolImpl final : private StringImplShape {
         WTF_MAKE_NONCOPYABLE(StaticSymbolImpl);
     public:
         template<unsigned characterCount>
@@ -124,10 +124,10 @@ protected:
 };
 static_assert(sizeof(SymbolImpl) == sizeof(SymbolImpl::StaticSymbolImpl), "");
 
-class PrivateSymbolImpl : public SymbolImpl {
+class PrivateSymbolImpl final : public SymbolImpl {
 public:
-    WTF_EXPORT_STRING_API static Ref<PrivateSymbolImpl> createNullSymbol();
-    WTF_EXPORT_STRING_API static Ref<PrivateSymbolImpl> create(StringImpl& rep);
+    WTF_EXPORT_PRIVATE static Ref<PrivateSymbolImpl> createNullSymbol();
+    WTF_EXPORT_PRIVATE static Ref<PrivateSymbolImpl> create(StringImpl& rep);
 
 private:
     PrivateSymbolImpl(const LChar* characters, unsigned length, Ref<StringImpl>&& base)
@@ -146,7 +146,7 @@ private:
     }
 };
 
-class RegisteredSymbolImpl : public SymbolImpl {
+class RegisteredSymbolImpl final : public SymbolImpl {
 private:
     friend class StringImpl;
     friend class SymbolImpl;
@@ -199,10 +199,10 @@ inline RegisteredSymbolImpl* SymbolImpl::asRegisteredSymbolImpl()
     return static_cast<RegisteredSymbolImpl*>(this);
 }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
 // SymbolImpls created from StaticStringImpl will ASSERT
 // in the generic ValueCheck<T>::checkConsistency
-// as they are not allocated by stringMalloc.
+// as they are not allocated by fastMalloc.
 // We don't currently have any way to detect that case
 // so we ignore the consistency check for all SymbolImpls*.
 template<> struct
@@ -214,7 +214,7 @@ template<> struct
 ValueCheck<const SymbolImpl*> {
     static void checkConsistency(const SymbolImpl*) { }
 };
-#endif
+#endif // ASSERT_ENABLED
 
 } // namespace WTF
 

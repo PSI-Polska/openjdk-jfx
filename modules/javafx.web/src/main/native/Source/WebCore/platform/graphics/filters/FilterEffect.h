@@ -24,6 +24,7 @@
 #include "ColorSpace.h"
 #include "FloatRect.h"
 #include "IntRect.h"
+#include "IntRectExtent.h"
 #include <JavaScriptCore/Uint8ClampedArray.h>
 #include <wtf/MathExtras.h>
 #include <wtf/RefCounted.h>
@@ -63,12 +64,6 @@ public:
     void copyUnmultipliedResult(Uint8ClampedArray& destination, const IntRect&);
     void copyPremultipliedResult(Uint8ClampedArray& destination, const IntRect&);
 
-#if ENABLE(OPENCL)
-    OpenCLHandle openCLImage() { return m_openCLImageResult; }
-    void setOpenCLImage(OpenCLHandle openCLImage) { m_openCLImageResult = openCLImage; }
-    ImageBuffer* openCLImageToImageBuffer();
-#endif
-
     FilterEffectVector& inputEffects() { return m_inputEffects; }
     FilterEffect* inputEffect(unsigned) const;
     unsigned numberOfEffectInputs() const { return m_inputEffects.size(); }
@@ -78,15 +73,15 @@ public:
     {
         // This function needs platform specific checks, if the memory managment is not done by FilterEffect.
         return m_imageBufferResult
-#if ENABLE(OPENCL)
-            || m_openCLImageResult
-#endif
             || m_unmultipliedImageResult
             || m_premultipliedImageResult;
     }
 
     FloatRect drawingRegionOfInputImage(const IntRect&) const;
     IntRect requestedRegionOfInputImageData(const IntRect&) const;
+
+    // Recurses on inputs.
+    FloatRect determineFilterPrimitiveSubregion();
 
     // Solid black image with different alpha values.
     bool isAlphaImage() const { return m_alphaImage; }
@@ -99,11 +94,6 @@ public:
     void setMaxEffectRect(const FloatRect& maxEffectRect) { m_maxEffectRect = maxEffectRect; }
 
     void apply();
-#if ENABLE(OPENCL)
-    void applyAll();
-#else
-    inline void applyAll() { apply(); }
-#endif
 
     // Correct any invalid pixels, if necessary, in the result of a filter operation.
     // This method is used to ensure valid pixel values on filter inputs and the final result.
@@ -113,6 +103,8 @@ public:
     virtual void determineAbsolutePaintRect();
 
     virtual FilterEffectType filterEffectType() const { return FilterEffectTypeUnknown; }
+
+    virtual IntOutsets outsets() const { return IntOutsets(); }
 
     enum class RepresentationType { TestOutput, Debugging };
     virtual WTF::TextStream& externalRepresentation(WTF::TextStream&, RepresentationType = RepresentationType::TestOutput) const;
@@ -163,9 +155,6 @@ protected:
     ImageBuffer* createImageBufferResult();
     Uint8ClampedArray* createUnmultipliedImageResult();
     Uint8ClampedArray* createPremultipliedImageResult();
-#if ENABLE(OPENCL)
-    OpenCLHandle createOpenCLImageResult(uint8_t* = 0);
-#endif
 
     // Return true if the filter will only operate correctly on valid RGBA values, with
     // alpha in [0,255] and each color component in [0, alpha].
@@ -195,9 +184,6 @@ private:
     std::unique_ptr<ImageBuffer> m_imageBufferResult;
     RefPtr<Uint8ClampedArray> m_unmultipliedImageResult;
     RefPtr<Uint8ClampedArray> m_premultipliedImageResult;
-#if ENABLE(OPENCL)
-    OpenCLHandle m_openCLImageResult;
-#endif
 
     IntRect m_absolutePaintRect;
 
@@ -225,8 +211,8 @@ private:
     // Should the effect clip to its primitive region, or expand to use the combined region of its inputs.
     bool m_clipsToBounds { true };
 
-    ColorSpace m_operatingColorSpace { ColorSpaceLinearRGB };
-    ColorSpace m_resultColorSpace { ColorSpaceSRGB };
+    ColorSpace m_operatingColorSpace { ColorSpace::LinearRGB };
+    ColorSpace m_resultColorSpace { ColorSpace::SRGB };
 };
 
 WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const FilterEffect&);

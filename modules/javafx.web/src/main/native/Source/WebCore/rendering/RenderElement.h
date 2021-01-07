@@ -28,6 +28,7 @@
 namespace WebCore {
 
 class ControlStates;
+class KeyframeList;
 class RenderBlock;
 class RenderTreeBuilder;
 
@@ -49,15 +50,15 @@ public:
 
     void initializeStyle();
 
-    // Calling with minimalStyleDifference > StyleDifferenceEqual indicates that
+    // Calling with minimalStyleDifference > StyleDifference::Equal indicates that
     // out-of-band state (e.g. animations) requires that styleDidChange processing
     // continue even if the style isn't different from the current style.
-    void setStyle(RenderStyle&&, StyleDifference minimalStyleDifference = StyleDifferenceEqual);
+    void setStyle(RenderStyle&&, StyleDifference minimalStyleDifference = StyleDifference::Equal);
 
     // The pseudo element style can be cached or uncached.  Use the cached method if the pseudo element doesn't respect
     // any pseudo classes (and therefore has no concept of changing state).
     const RenderStyle* getCachedPseudoStyle(PseudoId, const RenderStyle* parentStyle = nullptr) const;
-    std::unique_ptr<RenderStyle> getUncachedPseudoStyle(const PseudoStyleRequest&, const RenderStyle* parentStyle = nullptr, const RenderStyle* ownStyle = nullptr) const;
+    std::unique_ptr<RenderStyle> getUncachedPseudoStyle(const Style::PseudoElementRequest&, const RenderStyle* parentStyle = nullptr, const RenderStyle* ownStyle = nullptr) const;
 
     // This is null for anonymous renderers.
     Element* element() const { return downcast<Element>(RenderObject::node()); }
@@ -70,7 +71,7 @@ public:
     bool canContainFixedPositionObjects() const;
     bool canContainAbsolutelyPositionedObjects() const;
 
-    Color selectionColor(int colorProperty) const;
+    Color selectionColor(CSSPropertyID) const;
     std::unique_ptr<RenderStyle> selectionPseudoStyle() const;
 
     // Obtains the selection colors that should be used when painting a selection.
@@ -96,8 +97,6 @@ public:
     void removeLayers(RenderLayer* parentLayer);
     void moveLayers(RenderLayer* oldParent, RenderLayer* newParent);
     RenderLayer* findNextLayer(RenderLayer* parentLayer, RenderObject* startPoint, bool checkParent = true);
-
-    virtual RenderElement* hoverAncestor() const;
 
     virtual void dirtyLinesFromChangedChild(RenderObject&) { }
 
@@ -140,14 +139,14 @@ public:
     bool isTransparent() const { return style().opacity() < 1.0f; }
     float opacity() const { return style().opacity(); }
 
-    bool visibleToHitTesting() const { return style().visibility() == VISIBLE && style().pointerEvents() != PE_NONE; }
+    bool visibleToHitTesting() const { return style().visibility() == Visibility::Visible && style().pointerEvents() != PointerEvents::None; }
 
     bool hasBackground() const { return style().hasBackground(); }
     bool hasMask() const { return style().hasMask(); }
     bool hasClip() const { return isOutOfFlowPositioned() && style().hasClip(); }
     bool hasClipOrOverflowClip() const { return hasClip() || hasOverflowClip(); }
     bool hasClipPath() const { return style().clipPath(); }
-    bool hasHiddenBackface() const { return style().backfaceVisibility() == BackfaceVisibilityHidden; }
+    bool hasHiddenBackface() const { return style().backfaceVisibility() == BackfaceVisibility::Hidden; }
     bool hasOutlineAnnotation() const;
     bool hasOutline() const { return style().hasOutline() || hasOutlineAnnotation(); }
     bool hasSelfPaintingLayer() const;
@@ -195,8 +194,8 @@ public:
     bool hasCounterNodeMap() const { return m_hasCounterNodeMap; }
     void setHasCounterNodeMap(bool f) { m_hasCounterNodeMap = f; }
 
-    const RenderElement* enclosingRendererWithTextDecoration(TextDecoration, bool firstLine) const;
-    void drawLineForBoxSide(GraphicsContext&, const FloatRect&, BoxSide, Color, EBorderStyle, float adjacentWidth1, float adjacentWidth2, bool antialias = false) const;
+    const RenderElement* enclosingRendererWithTextDecoration(OptionSet<TextDecoration>, bool firstLine) const;
+    void drawLineForBoxSide(GraphicsContext&, const FloatRect&, BoxSide, Color, BorderStyle, float adjacentWidth1, float adjacentWidth2, bool antialias = false) const;
 
 #if ENABLE(TEXT_AUTOSIZING)
     void adjustComputedFontSizesOnBlocks(float size, float visibleWidth);
@@ -205,7 +204,7 @@ public:
     RenderBlock* containingBlockForFixedPosition() const;
     RenderBlock* containingBlockForAbsolutePosition() const;
 
-    RespectImageOrientationEnum shouldRespectImageOrientation() const;
+    WEBCORE_EXPORT ImageOrientation imageOrientation() const;
 
     void removeFromRenderFragmentedFlow();
     virtual void resetEnclosingFragmentedFlowAndChildInfoIncludingDescendants(RenderFragmentedFlow*);
@@ -222,6 +221,17 @@ public:
 
     RenderObject* attachRendererInternal(RenderPtr<RenderObject> child, RenderObject* beforeChild);
     RenderPtr<RenderObject> detachRendererInternal(RenderObject&);
+
+    virtual bool startTransition(double /* timeOffset */, CSSPropertyID, const RenderStyle* /* fromStyle */, const RenderStyle* /* toStyle */) { return false; }
+    virtual void transitionPaused(double /* timeOffset */, CSSPropertyID) { }
+    virtual void transitionFinished(CSSPropertyID) { }
+
+    virtual bool startAnimation(double /* timeOffset */, const Animation&, const KeyframeList&) { return false; }
+    virtual void animationPaused(double /* timeOffset */, const String& /* name */) { }
+    virtual void animationSeeked(double /* timeOffset */, const String& /* name */) { }
+    virtual void animationFinished(const String& /* name */) { }
+
+    virtual void suspendAnimations(MonotonicTime = MonotonicTime()) { }
 
 protected:
     enum BaseTypeFlag {
@@ -242,9 +252,6 @@ protected:
 
     enum StylePropagationType { PropagateToAllChildren, PropagateToBlockChildrenOnly };
     void propagateStyleToAnonymousChildren(StylePropagationType);
-
-    LayoutUnit valueForLength(const Length&, LayoutUnit maximumValue) const;
-    LayoutUnit minimumValueForLength(const Length&, LayoutUnit maximumValue) const;
 
     void setFirstChild(RenderObject* child) { m_firstChild = child; }
     void setLastChild(RenderObject* child) { m_lastChild = child; }
@@ -305,7 +312,7 @@ private:
     void updateImage(StyleImage*, StyleImage*);
     void updateShapeImage(const ShapeValue*, const ShapeValue*);
 
-    StyleDifference adjustStyleDifference(StyleDifference, unsigned contextSensitiveProperties) const;
+    StyleDifference adjustStyleDifference(StyleDifference, OptionSet<StyleDifferenceContextSensitiveProperty>) const;
     std::unique_ptr<RenderStyle> computeFirstLineStyle() const;
     void invalidateCachedFirstLineStyle();
 
@@ -338,7 +345,7 @@ private:
     unsigned m_renderBlockHasMarginAfterQuirk : 1;
     unsigned m_renderBlockShouldForceRelayoutChildren : 1;
     unsigned m_renderBlockFlowHasMarkupTruncation : 1;
-    unsigned m_renderBlockFlowLineLayoutPath : 2;
+    unsigned m_renderBlockFlowLineLayoutPath : 3;
 
     unsigned m_isRegisteredForVisibleInViewportCallback : 1;
     unsigned m_visibleInViewportState : 2;
@@ -364,16 +371,6 @@ inline void RenderElement::setChildNeedsLayout(MarkingBehavior markParents)
     setNormalChildNeedsLayoutBit(true);
     if (markParents == MarkContainingBlockChain)
         markContainingBlocksForLayout();
-}
-
-inline LayoutUnit RenderElement::valueForLength(const Length& length, LayoutUnit maximumValue) const
-{
-    return WebCore::valueForLength(length, maximumValue);
-}
-
-inline LayoutUnit RenderElement::minimumValueForLength(const Length& length, LayoutUnit maximumValue) const
-{
-    return WebCore::minimumValueForLength(length, maximumValue);
 }
 
 inline bool RenderElement::isRenderLayerModelObject() const
@@ -421,7 +418,7 @@ inline bool RenderElement::canContainFixedPositionObjects() const
 
 inline bool RenderElement::canContainAbsolutelyPositionedObjects() const
 {
-    return style().position() != StaticPosition
+    return style().position() != PositionType::Static
         || (isRenderBlock() && hasTransformRelatedProperty())
         || isSVGForeignObject()
         || isRenderView();

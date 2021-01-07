@@ -20,21 +20,25 @@
 
 #pragma once
 
-#include "JSCPoison.h"
-#include "JSWrapperObject.h"
+#include "JSObject.h"
 
 namespace JSC {
 
-class DateInstance : public JSWrapperObject {
-protected:
-    JS_EXPORT_PRIVATE DateInstance(VM&, Structure*);
-    void finishCreation(VM&);
-    JS_EXPORT_PRIVATE void finishCreation(VM&, double);
-
-    JS_EXPORT_PRIVATE static void destroy(JSCell*);
-
+class DateInstance final : public JSNonFinalObject {
 public:
-    typedef JSWrapperObject Base;
+    using Base = JSNonFinalObject;
+
+    static constexpr bool needsDestruction = true;
+    static void destroy(JSCell* cell)
+    {
+        static_cast<DateInstance*>(cell)->DateInstance::~DateInstance();
+    }
+
+    template<typename CellType, SubspaceAccess mode>
+    static IsoSubspace* subspaceFor(VM& vm)
+    {
+        return &vm.dateInstanceSpace;
+    }
 
     static DateInstance* create(VM& vm, Structure* structure, double date)
     {
@@ -50,42 +54,42 @@ public:
         return instance;
     }
 
-    double internalNumber() const { return internalValue().asNumber(); }
+    double internalNumber() const { return m_internalNumber; }
+    void setInternalNumber(double value) { m_internalNumber = value; }
 
     DECLARE_EXPORT_INFO;
 
-    const GregorianDateTime* gregorianDateTime(ExecState* exec) const
+    const GregorianDateTime* gregorianDateTime(VM& vm) const
     {
         if (m_data && m_data->m_gregorianDateTimeCachedForMS == internalNumber())
             return &m_data->m_cachedGregorianDateTime;
-        return calculateGregorianDateTime(exec);
+        return calculateGregorianDateTime(vm);
     }
 
-    const GregorianDateTime* gregorianDateTimeUTC(ExecState* exec) const
+    const GregorianDateTime* gregorianDateTimeUTC(VM& vm) const
     {
         if (m_data && m_data->m_gregorianDateTimeUTCCachedForMS == internalNumber())
             return &m_data->m_cachedGregorianDateTimeUTC;
-        return calculateGregorianDateTimeUTC(exec);
+        return calculateGregorianDateTimeUTC(vm);
     }
 
     static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
     {
-        return Structure::create(vm, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), info());
+        return Structure::create(vm, globalObject, prototype, TypeInfo(JSDateType, StructureFlags), info());
     }
 
+    static ptrdiff_t offsetOfInternalNumber() { return OBJECT_OFFSETOF(DateInstance, m_internalNumber); }
+    static ptrdiff_t offsetOfData() { return OBJECT_OFFSETOF(DateInstance, m_data); }
+
 private:
-    JS_EXPORT_PRIVATE const GregorianDateTime* calculateGregorianDateTime(ExecState*) const;
-    JS_EXPORT_PRIVATE const GregorianDateTime* calculateGregorianDateTimeUTC(ExecState*) const;
+    JS_EXPORT_PRIVATE DateInstance(VM&, Structure*);
+    void finishCreation(VM&);
+    JS_EXPORT_PRIVATE void finishCreation(VM&, double);
+    JS_EXPORT_PRIVATE const GregorianDateTime* calculateGregorianDateTime(VM&) const;
+    JS_EXPORT_PRIVATE const GregorianDateTime* calculateGregorianDateTimeUTC(VM&) const;
 
-    mutable PoisonedRefPtr<DateInstancePoison, DateInstanceData> m_data;
+    double m_internalNumber { PNaN };
+    mutable RefPtr<DateInstanceData> m_data;
 };
-
-DateInstance* asDateInstance(JSValue);
-
-inline DateInstance* asDateInstance(JSValue value)
-{
-    ASSERT(asObject(value)->inherits(*value.getObject()->vm(), DateInstance::info()));
-    return static_cast<DateInstance*>(asObject(value));
-}
 
 } // namespace JSC

@@ -62,7 +62,7 @@ void RenderQuote::willBeRemovedFromTree()
 void RenderQuote::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
     RenderInline::styleDidChange(diff, oldStyle);
-    if (diff >= StyleDifferenceLayout) {
+    if (diff >= StyleDifference::Layout) {
         m_needsTextUpdate = true;
         view().setHasQuotesNeedingUpdate(true);
     }
@@ -70,7 +70,7 @@ void RenderQuote::styleDidChange(StyleDifference diff, const RenderStyle* oldSty
 
 const unsigned maxDistinctQuoteCharacters = 16;
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
 
 static void checkNumberOfDistinctQuoteCharacters(UChar character)
 {
@@ -87,7 +87,7 @@ static void checkNumberOfDistinctQuoteCharacters(UChar character)
     ASSERT_NOT_REACHED();
 }
 
-#endif
+#endif // ASSERT_ENABLED
 
 struct QuotesForLanguage {
     const char* language;
@@ -259,7 +259,7 @@ static const QuotesForLanguage* quotesForLanguage(const String& language)
 
     const unsigned maxLanguageLength = 8;
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // One time check that the table meets the constraints that the code below relies on.
 
     static bool didOneTimeCheck = false;
@@ -284,7 +284,7 @@ static const QuotesForLanguage* quotesForLanguage(const String& language)
             checkNumberOfDistinctQuoteCharacters(quoteTable[i].close2);
         }
     }
-#endif
+#endif // ASSERT_ENABLED
 
     unsigned length = language.length();
     if (!length || length > maxLanguageLength)
@@ -371,13 +371,13 @@ String RenderQuote::computeText() const
         return emptyString();
     bool isOpenQuote = false;
     switch (m_type) {
-    case NO_OPEN_QUOTE:
-    case NO_CLOSE_QUOTE:
+    case QuoteType::NoOpenQuote:
+    case QuoteType::NoCloseQuote:
         return emptyString();
-    case OPEN_QUOTE:
+    case QuoteType::OpenQuote:
         isOpenQuote = true;
         FALLTHROUGH;
-    case CLOSE_QUOTE:
+    case QuoteType::CloseQuote:
         if (const QuotesData* quotes = style().quotes())
             return isOpenQuote ? quotes->openQuote(m_depth).impl() : quotes->closeQuote(m_depth).impl();
         if (const QuotesForLanguage* quotes = quotesForLanguage(style().locale()))
@@ -392,11 +392,11 @@ String RenderQuote::computeText() const
 bool RenderQuote::isOpen() const
 {
     switch (m_type) {
-    case OPEN_QUOTE:
-    case NO_OPEN_QUOTE:
+    case QuoteType::OpenQuote:
+    case QuoteType::NoOpenQuote:
         return true;
-    case CLOSE_QUOTE:
-    case NO_CLOSE_QUOTE:
+    case QuoteType::CloseQuote:
+    case QuoteType::NoCloseQuote:
         return false;
     }
     ASSERT_NOT_REACHED();

@@ -56,8 +56,8 @@ class Document;
 class DocumentLoader;
 class Frame;
 class ImageLoader;
+class Page;
 class Settings;
-class URL;
 
 template <typename T>
 using ResourceErrorOr = Expected<T, ResourceError>;
@@ -81,27 +81,29 @@ public:
 
     ResourceErrorOr<CachedResourceHandle<CachedImage>> requestImage(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedCSSStyleSheet>> requestCSSStyleSheet(CachedResourceRequest&&);
-    CachedResourceHandle<CachedCSSStyleSheet> requestUserCSSStyleSheet(CachedResourceRequest&&);
+    CachedResourceHandle<CachedCSSStyleSheet> requestUserCSSStyleSheet(Page&, CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedScript>> requestScript(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedFont>> requestFont(CachedResourceRequest&&, bool isSVG);
     ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestMedia(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestIcon(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestBeaconResource(CachedResourceRequest&&);
-    ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestRawResource(CachedResourceRequest&&);
+    ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestPingResource(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestMainResource(CachedResourceRequest&&);
     ResourceErrorOr<CachedResourceHandle<CachedSVGDocument>> requestSVGDocument(CachedResourceRequest&&);
 #if ENABLE(XSLT)
     ResourceErrorOr<CachedResourceHandle<CachedXSLStyleSheet>> requestXSLStyleSheet(CachedResourceRequest&&);
 #endif
-#if ENABLE(LINK_PREFETCH)
     ResourceErrorOr<CachedResourceHandle<CachedResource>> requestLinkResource(CachedResource::Type, CachedResourceRequest&&);
-#endif
 #if ENABLE(VIDEO_TRACK)
     ResourceErrorOr<CachedResourceHandle<CachedTextTrack>> requestTextTrack(CachedResourceRequest&&);
 #endif
 #if ENABLE(APPLICATION_MANIFEST)
     ResourceErrorOr<CachedResourceHandle<CachedApplicationManifest>> requestApplicationManifest(CachedResourceRequest&&);
 #endif
+
+    // Called to load Web Worker main script, Service Worker main script, importScripts(), XHR,
+    // EventSource, Fetch, and App Cache.
+    ResourceErrorOr<CachedResourceHandle<CachedRawResource>> requestRawResource(CachedResourceRequest&&);
 
     // Logs an access denied message to the console for the specified URL.
     void printAccessDeniedMessage(const URL& url) const;
@@ -124,16 +126,12 @@ public:
     CachePolicy cachePolicy(CachedResource::Type, const URL&) const;
 
     Frame* frame() const; // Can be null
-    Document* document() const { return m_document; } // Can be null
-    void setDocument(Document* document) { m_document = document; }
-
+    Document* document() const { return m_document.get(); } // Can be null
+    void setDocument(Document* document) { m_document = makeWeakPtr(document); }
     DocumentLoader* documentLoader() const { return m_documentLoader; }
     void clearDocumentLoader() { m_documentLoader = nullptr; }
-    PAL::SessionID sessionID() const;
 
-    void removeCachedResource(CachedResource&);
-
-    void loadDone(bool shouldPerformPostLoadActions = true);
+    void loadDone(LoadCompletionType, bool shouldPerformPostLoadActions = true);
 
     WEBCORE_EXPORT void garbageCollectDocumentResources();
 
@@ -170,7 +168,7 @@ private:
 
     ResourceErrorOr<CachedResourceHandle<CachedResource>> requestResource(CachedResource::Type, CachedResourceRequest&&, ForPreload = ForPreload::No, DeferOption = DeferOption::NoDefer);
     CachedResourceHandle<CachedResource> revalidateResource(CachedResourceRequest&&, CachedResource&);
-    CachedResourceHandle<CachedResource> loadResource(CachedResource::Type, CachedResourceRequest&&);
+    CachedResourceHandle<CachedResource> loadResource(CachedResource::Type, PAL::SessionID, CachedResourceRequest&&, const CookieJar&);
 
     void prepareFetch(CachedResource::Type, CachedResourceRequest&);
     void updateHTTPRequestHeaders(CachedResource::Type, CachedResourceRequest&);
@@ -181,7 +179,7 @@ private:
     RevalidationPolicy determineRevalidationPolicy(CachedResource::Type, CachedResourceRequest&, CachedResource* existingResource, ForPreload, DeferOption) const;
 
     bool shouldUpdateCachedResourceWithCurrentRequest(const CachedResource&, const CachedResourceRequest&);
-    CachedResourceHandle<CachedResource> updateCachedResourceWithCurrentRequest(const CachedResource&, CachedResourceRequest&&);
+    CachedResourceHandle<CachedResource> updateCachedResourceWithCurrentRequest(const CachedResource&, CachedResourceRequest&&, const PAL::SessionID&, const CookieJar&);
 
     bool shouldContinueAfterNotifyingLoadedFromMemoryCache(const CachedResourceRequest&, CachedResource&, ResourceError&);
     bool checkInsecureContent(CachedResource::Type, const URL&) const;
@@ -196,7 +194,7 @@ private:
 
     HashSet<String> m_validatedURLs;
     mutable DocumentResourceMap m_documentResources;
-    Document* m_document;
+    WeakPtr<Document> m_document;
     DocumentLoader* m_documentLoader;
 
     int m_requestCount;

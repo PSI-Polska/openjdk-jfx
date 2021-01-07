@@ -25,14 +25,14 @@
 
 @constructor
 @globalPrivate
-function createSetIterator(iteratedObject, kind)
+function SetIterator(iteratedObject, kind)
 {
     "use strict";
 
     @assert(@isSet(iteratedObject));
-    this.@iteratedObject = iteratedObject;
-    this.@setIteratorKind = kind;
-    this.@setBucket = @setBucketHead(iteratedObject);
+    @putByIdDirectPrivate(this, "iteratedObject", iteratedObject);
+    @putByIdDirectPrivate(this, "setIteratorKind", kind);
+    @putByIdDirectPrivate(this, "setBucket", @setBucketHead(iteratedObject));
 }
 
 function values()
@@ -42,7 +42,7 @@ function values()
     if (!@isSet(this))
         @throwTypeError("Set.prototype.values requires that |this| be Set");
 
-    return new @createSetIterator(this, @iterationKindValue);
+    return new @SetIterator(this, @iterationKindValue);
 }
 
 function entries()
@@ -52,7 +52,7 @@ function entries()
     if (!@isSet(this))
         @throwTypeError("Set.prototype.entries requires that |this| be Set");
 
-    return new @createSetIterator(this, @iterationKindKeyValue);
+    return new @SetIterator(this, @iterationKindEntries);
 }
 
 function forEach(callback /*, thisArg */)

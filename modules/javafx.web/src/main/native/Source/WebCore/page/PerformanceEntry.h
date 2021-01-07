@@ -32,13 +32,14 @@
 #pragma once
 
 #include "Performance.h"
-#include <wtf/Optional.h>
 #include <wtf/RefCounted.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
+DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(PerformanceEntry);
 class PerformanceEntry : public RefCounted<PerformanceEntry> {
+    WTF_MAKE_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(PerformanceEntry);
 public:
     virtual ~PerformanceEntry();
 
@@ -56,7 +57,7 @@ public:
 
     Type type() const { return m_type; }
 
-    static std::optional<Type> parseEntryTypeString(const String& entryType);
+    static Optional<Type> parseEntryTypeString(const String& entryType);
 
     bool isResource() const { return m_type == Type::Resource; }
     bool isMark() const { return m_type == Type::Mark; }

@@ -28,18 +28,19 @@
  */
 
 #include "config.h"
-#include "CryptographicallyRandomNumber.h"
+#include <wtf/CryptographicallyRandomNumber.h>
 
-#include "NeverDestroyed.h"
-#include "OSRandomSource.h"
 #include <mutex>
 #include <wtf/Lock.h>
+#include <wtf/NeverDestroyed.h>
+#include <wtf/OSRandomSource.h>
 
 namespace WTF {
 
 namespace {
 
 class ARC4Stream {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     ARC4Stream();
 
@@ -159,7 +160,13 @@ void ARC4RandomNumberGenerator::randomValues(void* buffer, size_t length)
 
 ARC4RandomNumberGenerator& sharedRandomNumberGenerator()
 {
-    static NeverDestroyed<ARC4RandomNumberGenerator> randomNumberGenerator;
+    static LazyNeverDestroyed<ARC4RandomNumberGenerator> randomNumberGenerator;
+    static std::once_flag onceFlag;
+    std::call_once(
+        onceFlag,
+        [] {
+            randomNumberGenerator.construct();
+        });
 
     return randomNumberGenerator;
 }

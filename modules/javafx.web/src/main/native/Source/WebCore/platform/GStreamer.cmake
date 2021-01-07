@@ -1,5 +1,5 @@
 if (ENABLE_VIDEO OR ENABLE_WEB_AUDIO)
-    list(APPEND WebCore_INCLUDE_DIRECTORIES
+    list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
         "${WEBCORE_DIR}/platform/graphics/gstreamer"
         "${WEBCORE_DIR}/platform/graphics/gstreamer/mse"
         "${WEBCORE_DIR}/platform/graphics/gstreamer/eme"
@@ -7,12 +7,14 @@ if (ENABLE_VIDEO OR ENABLE_WEB_AUDIO)
 
     list(APPEND WebCore_SOURCES
         platform/graphics/gstreamer/AudioTrackPrivateGStreamer.cpp
+        platform/graphics/gstreamer/GLVideoSinkGStreamer.cpp
         platform/graphics/gstreamer/GRefPtrGStreamer.cpp
-        platform/graphics/gstreamer/GStreamerUtilities.cpp
+        platform/graphics/gstreamer/GStreamerCommon.cpp
         platform/graphics/gstreamer/GstAllocatorFastMalloc.cpp
+        platform/graphics/gstreamer/GStreamerRegistryScanner.cpp
         platform/graphics/gstreamer/InbandTextTrackPrivateGStreamer.cpp
+        platform/graphics/gstreamer/MediaEngineConfigurationFactoryGStreamer.cpp
         platform/graphics/gstreamer/MediaPlayerPrivateGStreamer.cpp
-        platform/graphics/gstreamer/MediaPlayerPrivateGStreamerBase.cpp
         platform/graphics/gstreamer/MediaSampleGStreamer.cpp
         platform/graphics/gstreamer/TextCombinerGStreamer.cpp
         platform/graphics/gstreamer/TextSinkGStreamer.cpp
@@ -21,18 +23,51 @@ if (ENABLE_VIDEO OR ENABLE_WEB_AUDIO)
         platform/graphics/gstreamer/VideoTrackPrivateGStreamer.cpp
         platform/graphics/gstreamer/WebKitWebSourceGStreamer.cpp
 
-        platform/graphics/gstreamer/eme/GStreamerEMEUtilities.cpp
         platform/graphics/gstreamer/eme/WebKitClearKeyDecryptorGStreamer.cpp
         platform/graphics/gstreamer/eme/WebKitCommonEncryptionDecryptorGStreamer.cpp
 
         platform/graphics/gstreamer/mse/AppendPipeline.cpp
         platform/graphics/gstreamer/mse/GStreamerMediaDescription.cpp
+        platform/graphics/gstreamer/mse/GStreamerRegistryScannerMSE.cpp
         platform/graphics/gstreamer/mse/MediaPlayerPrivateGStreamerMSE.cpp
         platform/graphics/gstreamer/mse/MediaSourceClientGStreamerMSE.cpp
         platform/graphics/gstreamer/mse/MediaSourceGStreamer.cpp
         platform/graphics/gstreamer/mse/PlaybackPipeline.cpp
         platform/graphics/gstreamer/mse/SourceBufferPrivateGStreamer.cpp
         platform/graphics/gstreamer/mse/WebKitMediaSourceGStreamer.cpp
+
+        platform/mediastream/libwebrtc/GStreamerVideoDecoderFactory.cpp
+        platform/mediastream/libwebrtc/GStreamerVideoEncoder.cpp
+        platform/mediastream/libwebrtc/GStreamerVideoEncoderFactory.cpp
+        platform/mediastream/libwebrtc/LibWebRTCAudioModule.cpp
+        platform/mediastream/libwebrtc/LibWebRTCProviderGStreamer.cpp
+
+        platform/mediastream/gstreamer/GStreamerAudioCaptureSource.cpp
+        platform/mediastream/gstreamer/GStreamerAudioCapturer.cpp
+        platform/mediastream/gstreamer/GStreamerCaptureDeviceManager.cpp
+        platform/mediastream/gstreamer/GStreamerCapturer.cpp
+        platform/mediastream/gstreamer/GStreamerMediaStreamSource.cpp
+        platform/mediastream/gstreamer/GStreamerVideoCaptureSource.cpp
+        platform/mediastream/gstreamer/GStreamerVideoCapturer.cpp
+        platform/mediastream/gstreamer/GStreamerVideoFrameLibWebRTC.cpp
+        platform/mediastream/gstreamer/MockGStreamerAudioCaptureSource.cpp
+        platform/mediastream/gstreamer/MockGStreamerVideoCaptureSource.cpp
+        platform/mediastream/gstreamer/RealtimeIncomingAudioSourceLibWebRTC.cpp
+        platform/mediastream/gstreamer/RealtimeIncomingVideoSourceLibWebRTC.cpp
+        platform/mediastream/gstreamer/RealtimeMediaSourceCenterLibWebRTC.cpp
+        platform/mediastream/gstreamer/RealtimeOutgoingAudioSourceLibWebRTC.cpp
+        platform/mediastream/gstreamer/RealtimeOutgoingVideoSourceLibWebRTC.cpp
+    )
+
+    list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
+        platform/graphics/gstreamer/GRefPtrGStreamer.h
+        platform/graphics/gstreamer/GStreamerCommon.h
+        platform/graphics/gstreamer/GUniquePtrGStreamer.h
+        platform/graphics/gstreamer/MediaPlayerRequestInstallMissingPluginsCallback.h
+
+        platform/mediastream/libwebrtc/GStreamerVideoDecoderFactory.h
+        platform/mediastream/libwebrtc/GStreamerVideoEncoderFactory.h
+        platform/mediastream/libwebrtc/LibWebRTCProviderGStreamer.h
     )
 
     list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
@@ -85,10 +120,23 @@ if (ENABLE_VIDEO)
             platform/graphics/gstreamer/VideoTextureCopierGStreamer.cpp
         )
     endif ()
+
+    if (ENABLE_MEDIA_STREAM OR ENABLE_WEB_RTC)
+        if (PC_GSTREAMER_VERSION VERSION_LESS "1.10")
+            message(FATAL_ERROR "GStreamer 1.10 is needed for ENABLE_MEDIA_STREAM or ENABLE_WEB_RTC")
+        else ()
+            list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
+                ${GSTREAMER_CODECPARSERS_INCLUDE_DIRS}
+            )
+            list(APPEND WebCore_LIBRARIES
+                ${GSTREAMER_CODECPARSERS_LIBRARIES}
+            )
+        endif ()
+    endif ()
 endif ()
 
 if (ENABLE_WEB_AUDIO)
-    list(APPEND WebCore_INCLUDE_DIRECTORIES
+    list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
         "${WEBCORE_DIR}/platform/audio/gstreamer"
     )
 
@@ -111,15 +159,20 @@ if (ENABLE_WEB_AUDIO)
 endif ()
 
 if (ENABLE_ENCRYPTED_MEDIA)
-    list(APPEND WebCore_INCLUDE_DIRECTORIES
+    list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
         "${WEBCORE_DIR}/platform/encryptedmedia/clearkey"
-        ${LIBGCRYPT_INCLUDE_DIRS}
     )
+
     list(APPEND WebCore_SOURCES
         platform/encryptedmedia/clearkey/CDMClearKey.cpp
 
         platform/graphics/gstreamer/eme/CDMFactoryGStreamer.cpp
     )
+
+    list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
+        ${LIBGCRYPT_INCLUDE_DIRS}
+    )
+
     list(APPEND WebCore_LIBRARIES
         ${LIBGCRYPT_LIBRARIES} -lgpg-error
     )

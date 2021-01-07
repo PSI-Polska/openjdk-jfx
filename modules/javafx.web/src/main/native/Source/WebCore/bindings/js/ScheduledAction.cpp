@@ -32,8 +32,8 @@
 #include "FrameLoader.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMWindow.h"
-#include "JSMainThreadExecState.h"
-#include "JSMainThreadExecStateInstrumentation.h"
+#include "JSExecState.h"
+#include "JSExecStateInstrumentation.h"
 #include "JSWorkerGlobalScope.h"
 #include "ScriptController.h"
 #include "ScriptExecutionContext.h"
@@ -96,34 +96,31 @@ void ScheduledAction::executeFunctionInContext(JSGlobalObject* globalObject, JSV
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     CallData callData;
-    CallType callType = getCallData(m_function.get(), callData);
+    CallType callType = getCallData(vm, m_function.get(), callData);
     if (callType == CallType::None)
         return;
 
-    ExecState* exec = globalObject->globalExec();
+    JSGlobalObject* lexicalGlobalObject = globalObject;
 
     MarkedArgumentBuffer arguments;
     for (auto& argument : m_arguments)
         arguments.append(argument.get());
     if (UNLIKELY(arguments.hasOverflowed())) {
-        throwOutOfMemoryError(exec, scope);
+        throwOutOfMemoryError(lexicalGlobalObject, scope);
         NakedPtr<JSC::Exception> exception = scope.exception();
-        reportException(exec, exception);
+        reportException(lexicalGlobalObject, exception);
         return;
     }
 
-    InspectorInstrumentationCookie cookie = JSMainThreadExecState::instrumentFunctionCall(&context, callType, callData);
+    JSExecState::instrumentFunctionCall(&context, callType, callData);
 
     NakedPtr<JSC::Exception> exception;
-    if (is<Document>(context))
-        JSMainThreadExecState::profiledCall(exec, JSC::ProfilingReason::Other, m_function.get(), callType, callData, thisValue, arguments, exception);
-    else
-        JSC::profiledCall(exec, JSC::ProfilingReason::Other, m_function.get(), callType, callData, thisValue, arguments, exception);
+    JSExecState::profiledCall(lexicalGlobalObject, JSC::ProfilingReason::Other, m_function.get(), callType, callData, thisValue, arguments, exception);
 
-    InspectorInstrumentation::didCallFunction(cookie, &context);
+    InspectorInstrumentation::didCallFunction(&context);
 
     if (exception)
-        reportException(exec, exception);
+        reportException(lexicalGlobalObject, exception);
 }
 
 void ScheduledAction::execute(Document& document)
@@ -139,7 +136,7 @@ void ScheduledAction::execute(Document& document)
     if (m_function)
         executeFunctionInContext(window, window->proxy(), document);
     else
-        frame->script().executeScriptInWorld(m_isolatedWorld, m_code);
+        frame->script().executeScriptInWorldIgnoringException(m_isolatedWorld, m_code);
 }
 
 void ScheduledAction::execute(WorkerGlobalScope& workerGlobalScope)
@@ -153,7 +150,7 @@ void ScheduledAction::execute(WorkerGlobalScope& workerGlobalScope)
         JSWorkerGlobalScope* contextWrapper = scriptController->workerGlobalScopeWrapper();
         executeFunctionInContext(contextWrapper, contextWrapper, workerGlobalScope);
     } else {
-        ScriptSourceCode code(m_code, workerGlobalScope.url());
+        ScriptSourceCode code(m_code, URL(workerGlobalScope.url()));
         scriptController->evaluate(code);
     }
 }

@@ -30,8 +30,8 @@
 
 namespace JSC {
 
-static EncodedJSValue JSC_HOST_CALL booleanProtoFuncToString(ExecState*);
-static EncodedJSValue JSC_HOST_CALL booleanProtoFuncValueOf(ExecState*);
+static EncodedJSValue JSC_HOST_CALL booleanProtoFuncToString(JSGlobalObject*, CallFrame*);
+static EncodedJSValue JSC_HOST_CALL booleanProtoFuncValueOf(JSGlobalObject*, CallFrame*);
 
 }
 
@@ -65,39 +65,41 @@ void BooleanPrototype::finishCreation(VM& vm, JSGlobalObject*)
 
 // ------------------------------ Functions ---------------------------
 
-EncodedJSValue JSC_HOST_CALL booleanProtoFuncToString(ExecState* exec)
+EncodedJSValue JSC_HOST_CALL booleanProtoFuncToString(JSGlobalObject* globalObject, CallFrame* callFrame)
 {
-    VM& vm = exec->vm();
+    VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
-    JSValue thisValue = exec->thisValue();
+    JSValue thisValue = callFrame->thisValue();
     if (thisValue == jsBoolean(false))
         return JSValue::encode(vm.smallStrings.falseString());
 
     if (thisValue == jsBoolean(true))
         return JSValue::encode(vm.smallStrings.trueString());
 
-    if (!thisValue.inherits(vm, BooleanObject::info()))
-        return throwVMTypeError(exec, scope);
+    auto* thisObject = jsDynamicCast<BooleanObject*>(vm, thisValue);
+    if (UNLIKELY(!thisObject))
+        return throwVMTypeError(globalObject, scope);
 
-    if (asBooleanObject(thisValue)->internalValue() == jsBoolean(false))
+    if (thisObject->internalValue() == jsBoolean(false))
         return JSValue::encode(vm.smallStrings.falseString());
 
-    ASSERT(asBooleanObject(thisValue)->internalValue() == jsBoolean(true));
+    ASSERT(thisObject->internalValue() == jsBoolean(true));
     return JSValue::encode(vm.smallStrings.trueString());
 }
 
-EncodedJSValue JSC_HOST_CALL booleanProtoFuncValueOf(ExecState* exec)
+EncodedJSValue JSC_HOST_CALL booleanProtoFuncValueOf(JSGlobalObject* globalObject, CallFrame* callFrame)
 {
-    VM& vm = exec->vm();
+    VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
-    JSValue thisValue = exec->thisValue();
+    JSValue thisValue = callFrame->thisValue();
     if (thisValue.isBoolean())
         return JSValue::encode(thisValue);
 
-    if (!thisValue.inherits(vm, BooleanObject::info()))
-        return throwVMTypeError(exec, scope);
+    auto* thisObject = jsDynamicCast<BooleanObject*>(vm, thisValue);
+    if (UNLIKELY(!thisObject))
+        return throwVMTypeError(globalObject, scope);
 
-    return JSValue::encode(asBooleanObject(thisValue)->internalValue());
+    return JSValue::encode(thisObject->internalValue());
 }
 
 } // namespace JSC

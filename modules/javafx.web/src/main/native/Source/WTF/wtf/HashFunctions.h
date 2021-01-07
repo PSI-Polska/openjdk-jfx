@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005, 2006, 2008 Apple Inc. All rights reserved.
+ * Copyright (C) 2005-2019 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,8 +18,7 @@
  *
  */
 
-#ifndef WTF_HashFunctions_h
-#define WTF_HashFunctions_h
+#pragma once
 
 #include <stdint.h>
 #include <tuple>
@@ -103,7 +102,7 @@ namespace WTF {
     template<typename T> struct IntHash {
         static unsigned hash(T key) { return intHash(static_cast<typename IntTypes<sizeof(T)>::UnsignedType>(key)); }
         static bool equal(T a, T b) { return a == b; }
-        static const bool safeToCompareToEmptyOrDeleted = true;
+        static constexpr bool safeToCompareToEmptyOrDeleted = true;
     };
 
     template<typename T> struct FloatHash {
@@ -116,7 +115,7 @@ namespace WTF {
         {
             return bitwise_cast<Bits>(a) == bitwise_cast<Bits>(b);
         }
-        static const bool safeToCompareToEmptyOrDeleted = true;
+        static constexpr bool safeToCompareToEmptyOrDeleted = true;
     };
 
     // pointer identity hash function
@@ -130,7 +129,7 @@ namespace WTF {
 
         static unsigned hash(PtrType key) { return IntHash<uintptr_t>::hash(reinterpret_cast<uintptr_t>(key)); }
         static bool equal(PtrType a, PtrType b) { return a == b; }
-        static const bool safeToCompareToEmptyOrDeleted = true;
+        static constexpr bool safeToCompareToEmptyOrDeleted = true;
     };
 
     template <typename T>
@@ -139,7 +138,7 @@ namespace WTF {
 
         static unsigned hash(PtrType key) { return IntHash<uintptr_t>::hash(reinterpret_cast<uintptr_t>(key)); }
         static bool equal(PtrType a, PtrType b) { return a == b; }
-        static const bool safeToCompareToEmptyOrDeleted = true;
+        static constexpr bool safeToCompareToEmptyOrDeleted = true;
 
         static unsigned hash(const T& key) { return hash(getPtr(key)); }
         static bool equal(const T& a, const T& b) { return getPtr(a) == getPtr(b); }
@@ -151,7 +150,7 @@ namespace WTF {
     };
 
     template<typename P> struct PtrHash<Ref<P>> : PtrHashBase<Ref<P>, IsSmartPtr<Ref<P>>::value> {
-        static const bool safeToCompareToEmptyOrDeleted = false;
+        static constexpr bool safeToCompareToEmptyOrDeleted = false;
     };
 
     // default hash function for each type
@@ -167,13 +166,13 @@ namespace WTF {
         {
             return DefaultHash<T>::Hash::equal(a.first, b.first) && DefaultHash<U>::Hash::equal(a.second, b.second);
         }
-        static const bool safeToCompareToEmptyOrDeleted = DefaultHash<T>::Hash::safeToCompareToEmptyOrDeleted && DefaultHash<U>::Hash::safeToCompareToEmptyOrDeleted;
+        static constexpr bool safeToCompareToEmptyOrDeleted = DefaultHash<T>::Hash::safeToCompareToEmptyOrDeleted && DefaultHash<U>::Hash::safeToCompareToEmptyOrDeleted;
     };
 
     template<typename T, typename U> struct IntPairHash {
         static unsigned hash(const std::pair<T, U>& p) { return pairIntHash(p.first, p.second); }
         static bool equal(const std::pair<T, U>& a, const std::pair<T, U>& b) { return PairHash<T, T>::equal(a, b); }
-        static const bool safeToCompareToEmptyOrDeleted = PairHash<T, U>::safeToCompareToEmptyOrDeleted;
+        static constexpr bool safeToCompareToEmptyOrDeleted = PairHash<T, U>::safeToCompareToEmptyOrDeleted;
     };
 
     template<typename... Types>
@@ -212,7 +211,7 @@ namespace WTF {
         static constexpr bool allTrue(BoolType value) { return value; }
         template<typename BoolType, typename... BoolTypes>
         static constexpr bool allTrue(BoolType value, BoolTypes... values) { return value && allTrue(values...); }
-        static const bool safeToCompareToEmptyOrDeleted = allTrue(DefaultHash<Types>::Hash::safeToCompareToEmptyOrDeleted...);
+        static constexpr bool safeToCompareToEmptyOrDeleted = allTrue(DefaultHash<Types>::Hash::safeToCompareToEmptyOrDeleted...);
     };
 
     // make IntHash the default hash function for many integer types
@@ -243,6 +242,10 @@ namespace WTF {
 
     template<typename P, typename Deleter> struct DefaultHash<std::unique_ptr<P, Deleter>> { typedef PtrHash<std::unique_ptr<P, Deleter>> Hash; };
 
+#ifdef __OBJC__
+    template<> struct DefaultHash<__unsafe_unretained id> { using Hash = PtrHash<__unsafe_unretained id>; };
+#endif
+
     // make IntPairHash the default hash function for pairs of (at most) 32-bit integers.
 
     template<> struct DefaultHash<std::pair<short, short>> { typedef IntPairHash<short, short> Hash; };
@@ -272,5 +275,3 @@ namespace WTF {
 using WTF::DefaultHash;
 using WTF::IntHash;
 using WTF::PtrHash;
-
-#endif // WTF_HashFunctions_h

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,7 +24,8 @@
  */
 
 #include "config.h"
-#include "DataLog.h"
+#include <wtf/DataLog.h>
+
 #include <stdarg.h>
 #include <string.h>
 #include <wtf/FilePrintStream.h>
@@ -51,7 +52,7 @@
 
 namespace WTF {
 
-static const size_t maxPathLength = 1024;
+static constexpr size_t maxPathLength = 1024;
 
 static PrintStream* s_file;
 static uint64_t s_fileData[(sizeof(FilePrintStream) + 7) / 8];

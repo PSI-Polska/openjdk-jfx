@@ -2,7 +2,7 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2004-2018 Apple Inc. All rights reserved.
  *           (C) 2006 Alexey Proskuryakov (ap@nypop.com)
  *
  * This library is free software; you can redistribute it and/or
@@ -49,9 +49,12 @@
 #include "ShadowRoot.h"
 #include "Text.h"
 #include "TextControlInnerElements.h"
+#include <wtf/IsoMallocInlines.h>
 #include <wtf/text/StringBuilder.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(HTMLTextFormControlElement);
 
 using namespace HTMLNames;
 
@@ -62,6 +65,7 @@ HTMLTextFormControlElement::HTMLTextFormControlElement(const QualifiedName& tagN
     , m_cachedSelectionDirection(SelectionHasNoDirection)
     , m_lastChangeWasUserEdit(false)
     , m_isPlaceholderVisible(false)
+    , m_canShowPlaceholder(true)
     , m_cachedSelectionStart(-1)
     , m_cachedSelectionEnd(-1)
 {
@@ -107,7 +111,7 @@ void HTMLTextFormControlElement::dispatchBlurEvent(RefPtr<Element>&& newFocusedE
 
 void HTMLTextFormControlElement::didEditInnerTextValue()
 {
-    if (!isTextField())
+    if (!renderer() || !isTextField())
         return;
 
     LOG(Editing, "HTMLTextFormControlElement %p didEditInnerTextValue", this);
@@ -127,7 +131,7 @@ String HTMLTextFormControlElement::strippedPlaceholder() const
 {
     // According to the HTML5 specification, we need to remove CR and LF from
     // the attribute value.
-    const AtomicString& attributeValue = attributeWithoutSynchronization(placeholderAttr);
+    const AtomString& attributeValue = attributeWithoutSynchronization(placeholderAttr);
     if (!attributeValue.contains(newlineCharacter) && !attributeValue.contains(carriageReturn))
         return attributeValue;
 
@@ -147,7 +151,7 @@ static bool isNotLineBreak(UChar ch) { return ch != newlineCharacter && ch != ca
 
 bool HTMLTextFormControlElement::isPlaceholderEmpty() const
 {
-    const AtomicString& attributeValue = attributeWithoutSynchronization(placeholderAttr);
+    const AtomString& attributeValue = attributeWithoutSynchronization(placeholderAttr);
     return attributeValue.string().find(isNotLineBreak) == notFound;
 }
 
@@ -155,7 +159,7 @@ bool HTMLTextFormControlElement::placeholderShouldBeVisible() const
 {
     // This function is used by the style resolver to match the :placeholder-shown pseudo class.
     // Since it is used for styling, it must not use any value depending on the style.
-    return supportsPlaceholder() && isEmptyValue() && !isPlaceholderEmpty();
+    return supportsPlaceholder() && isEmptyValue() && !isPlaceholderEmpty() && m_canShowPlaceholder;
 }
 
 void HTMLTextFormControlElement::updatePlaceholderVisibility()
@@ -167,6 +171,12 @@ void HTMLTextFormControlElement::updatePlaceholderVisibility()
         return;
 
     invalidateStyleForSubtree();
+}
+
+void HTMLTextFormControlElement::setCanShowPlaceholder(bool canShowPlaceholder)
+{
+    m_canShowPlaceholder = canShowPlaceholder;
+    updatePlaceholderVisibility();
 }
 
 void HTMLTextFormControlElement::setSelectionStart(int start)
@@ -186,14 +196,7 @@ void HTMLTextFormControlElement::setSelectionDirection(const String& direction)
 
 void HTMLTextFormControlElement::select(SelectionRevealMode revealMode, const AXTextStateChangeIntent& intent)
 {
-    // FIXME: We should abstract the selection behavior into an EditingBehavior function instead
-    // of hardcoding the behavior using a macro define.
-#if PLATFORM(IOS)
-    // We don't want to select all the text on iOS. Instead use the standard textfield behavior of going to the end of the line.
-    setSelectionRange(std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), SelectionHasForwardDirection, revealMode, intent);
-#else
     setSelectionRange(0, std::numeric_limits<int>::max(), SelectionHasNoDirection, revealMode, intent);
-#endif
 }
 
 String HTMLTextFormControlElement::selectedText() const
@@ -293,15 +296,23 @@ void HTMLTextFormControlElement::setSelectionRange(int start, int end, TextField
     auto innerText = innerTextElement();
     bool hasFocus = document().focusedElement() == this;
     if (!hasFocus && innerText) {
+        if (!isConnected()) {
+            cacheSelection(start, end, direction);
+            return;
+        }
+
         // FIXME: Removing this synchronous layout requires fixing setSelectionWithoutUpdatingAppearance not needing up-to-date style.
         document().updateLayoutIgnorePendingStylesheets();
+
+        if (!isTextField())
+            return;
 
         // Double-check the state of innerTextElement after the layout.
         innerText = innerTextElement();
         auto* rendererTextControl = renderer();
 
         if (innerText && rendererTextControl) {
-            if (rendererTextControl->style().visibility() == HIDDEN || !innerText->renderBox() || !innerText->renderBox()->height()) {
+            if (rendererTextControl->style().visibility() == Visibility::Hidden || !innerText->renderBox() || !innerText->renderBox()->height()) {
                 cacheSelection(start, end, direction);
                 return;
             }
@@ -380,11 +391,11 @@ int HTMLTextFormControlElement::computeSelectionEnd() const
     return indexForPosition(frame->selection().selection().end());
 }
 
-static const AtomicString& directionString(TextFieldSelectionDirection direction)
+static const AtomString& directionString(TextFieldSelectionDirection direction)
 {
-    static NeverDestroyed<const AtomicString> none("none", AtomicString::ConstructFromLiteral);
-    static NeverDestroyed<const AtomicString> forward("forward", AtomicString::ConstructFromLiteral);
-    static NeverDestroyed<const AtomicString> backward("backward", AtomicString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> none("none", AtomString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> forward("forward", AtomString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> backward("backward", AtomString::ConstructFromLiteral);
 
     switch (direction) {
     case SelectionHasNoDirection:
@@ -399,7 +410,7 @@ static const AtomicString& directionString(TextFieldSelectionDirection direction
     return none;
 }
 
-const AtomicString& HTMLTextFormControlElement::selectionDirection() const
+const AtomString& HTMLTextFormControlElement::selectionDirection() const
 {
     if (!isTextField())
         return directionString(SelectionHasNoDirection);
@@ -487,10 +498,10 @@ void HTMLTextFormControlElement::selectionChanged(bool shouldFireSelectEvent)
     cacheSelection(computeSelectionStart(), computeSelectionEnd(), computeSelectionDirection());
 
     if (shouldFireSelectEvent && m_cachedSelectionStart != m_cachedSelectionEnd)
-        dispatchEvent(Event::create(eventNames().selectEvent, true, false));
+        dispatchEvent(Event::create(eventNames().selectEvent, Event::CanBubble::Yes, Event::IsCancelable::No));
 }
 
-void HTMLTextFormControlElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void HTMLTextFormControlElement::parseAttribute(const QualifiedName& name, const AtomString& value)
 {
     if (name == placeholderAttr) {
         updatePlaceholderText();
@@ -505,9 +516,9 @@ void HTMLTextFormControlElement::disabledStateChanged()
     updateInnerTextElementEditability();
 }
 
-void HTMLTextFormControlElement::readOnlyAttributeChanged()
+void HTMLTextFormControlElement::readOnlyStateChanged()
 {
-    HTMLFormControlElementWithState::disabledAttributeChanged();
+    HTMLFormControlElementWithState::readOnlyStateChanged();
     updateInnerTextElementEditability();
 }
 
@@ -519,7 +530,7 @@ bool HTMLTextFormControlElement::isInnerTextElementEditable() const
 void HTMLTextFormControlElement::updateInnerTextElementEditability()
 {
     if (auto innerText = innerTextElement()) {
-        auto value = isInnerTextElementEditable() ? AtomicString { "plaintext-only", AtomicString::ConstructFromLiteral } : AtomicString { "false", AtomicString::ConstructFromLiteral };
+        auto value = isInnerTextElementEditable() ? AtomString { "plaintext-only", AtomString::ConstructFromLiteral } : AtomString { "false", AtomString::ConstructFromLiteral };
         innerText->setAttributeWithoutSynchronization(contenteditableAttr, value);
     }
 }
@@ -563,7 +574,7 @@ void HTMLTextFormControlElement::setInnerTextValue(const String& value)
     String previousValue = innerTextValueFrom(*innerText);
     bool textIsChanged = value != previousValue;
     if (textIsChanged || !innerText->hasChildNodes()) {
-#if HAVE(ACCESSIBILITY) && !PLATFORM(COCOA)
+#if ENABLE(ACCESSIBILITY) && !PLATFORM(COCOA)
         if (textIsChanged && renderer()) {
             if (AXObjectCache* cache = document().existingAXObjectCache())
                 cache->postNotification(this, AXObjectCache::AXValueChanged, TargetObservableParent);
@@ -580,7 +591,7 @@ void HTMLTextFormControlElement::setInnerTextValue(const String& value)
                 innerText->appendChild(HTMLBRElement::create(document()));
         }
 
-#if HAVE(ACCESSIBILITY) && PLATFORM(COCOA)
+#if ENABLE(ACCESSIBILITY) && PLATFORM(COCOA)
         if (textIsChanged && renderer()) {
             if (AXObjectCache* cache = document().existingAXObjectCache())
                 cache->deferTextReplacementNotificationForTextControl(*this, previousValue);
@@ -647,17 +658,21 @@ unsigned HTMLTextFormControlElement::indexForPosition(const Position& passedPosi
 
     unsigned length = innerTextValue().length();
     index = std::min(index, length); // FIXME: We shouldn't have to call innerTextValue() just to ignore the last LF. See finishText.
-#ifndef ASSERT_DISABLED
+#if 0
+    // FIXME: This assertion code was never built, has bit rotted, and needs to be fixed before it can be enabled:
+    // https://bugs.webkit.org/show_bug.cgi?id=205706.
+#if ASSERT_ENABLED
     VisiblePosition visiblePosition = passedPosition;
     unsigned indexComputedByVisiblePosition = 0;
     if (visiblePosition.isNotNull())
         indexComputedByVisiblePosition = WebCore::indexForVisiblePosition(innerText, visiblePosition, false /* forSelectionPreservation */);
     ASSERT(index == indexComputedByVisiblePosition);
 #endif
+#endif
     return index;
 }
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 void HTMLTextFormControlElement::hidePlaceholder()
 {
     if (RefPtr<HTMLElement> placeholder = placeholderElement())
@@ -721,13 +736,13 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
             unsigned position = 0;
             while (breakNode == node && breakOffset <= length) {
                 if (breakOffset > position) {
-                    result.append(data, position, breakOffset - position);
+                    result.appendSubstring(data, position, breakOffset - position);
                     position = breakOffset;
                     result.append(newlineCharacter);
                 }
                 getNextSoftBreak(line, breakNode, breakOffset);
             }
-            result.append(data, position, length - position);
+            result.appendSubstring(data, position, length - position);
         }
         while (breakNode == node)
             getNextSoftBreak(line, breakNode, breakOffset);
@@ -762,7 +777,7 @@ static const Element* parentHTMLElement(const Element* element)
 String HTMLTextFormControlElement::directionForFormData() const
 {
     for (const Element* element = this; element; element = parentHTMLElement(element)) {
-        const AtomicString& dirAttributeValue = element->attributeWithoutSynchronization(dirAttr);
+        const AtomString& dirAttributeValue = element->attributeWithoutSynchronization(dirAttr);
         if (dirAttributeValue.isNull())
             continue;
 
@@ -772,7 +787,7 @@ String HTMLTextFormControlElement::directionForFormData() const
         if (equalLettersIgnoringASCIICase(dirAttributeValue, "auto")) {
             bool isAuto;
             TextDirection textDirection = static_cast<const HTMLElement*>(element)->directionalityIfhasDirAutoAttribute(isAuto);
-            return textDirection == RTL ? "rtl" : "ltr";
+            return textDirection == TextDirection::RTL ? "rtl" : "ltr";
         }
     }
 
@@ -811,30 +826,30 @@ void HTMLTextFormControlElement::adjustInnerTextStyle(const RenderStyle& parentS
     }
 
     if (isDisabledFormControl())
-        textBlockStyle.setColor(RenderTheme::singleton().disabledTextColor(textBlockStyle.visitedDependentColor(CSSPropertyColor), parentStyle.visitedDependentColor(CSSPropertyBackgroundColor)));
-#if PLATFORM(IOS)
-    if (textBlockStyle.textSecurity() != TSNONE && !textBlockStyle.isLeftToRightDirection()) {
+        textBlockStyle.setColor(RenderTheme::singleton().disabledTextColor(textBlockStyle.visitedDependentColorWithColorFilter(CSSPropertyColor), parentStyle.visitedDependentColorWithColorFilter(CSSPropertyBackgroundColor)));
+#if PLATFORM(IOS_FAMILY)
+    if (textBlockStyle.textSecurity() != TextSecurity::None && !textBlockStyle.isLeftToRightDirection()) {
         // Preserve the alignment but force the direction to LTR so that the last-typed, unmasked character
         // (which cannot have RTL directionality) will appear to the right of the masked characters. See <rdar://problem/7024375>.
 
         switch (textBlockStyle.textAlign()) {
-        case TASTART:
-        case JUSTIFY:
-            textBlockStyle.setTextAlign(RIGHT);
+        case TextAlignMode::Start:
+        case TextAlignMode::Justify:
+            textBlockStyle.setTextAlign(TextAlignMode::Right);
             break;
-        case TAEND:
-            textBlockStyle.setTextAlign(LEFT);
+        case TextAlignMode::End:
+            textBlockStyle.setTextAlign(TextAlignMode::Left);
             break;
-        case LEFT:
-        case RIGHT:
-        case CENTER:
-        case WEBKIT_LEFT:
-        case WEBKIT_RIGHT:
-        case WEBKIT_CENTER:
+        case TextAlignMode::Left:
+        case TextAlignMode::Right:
+        case TextAlignMode::Center:
+        case TextAlignMode::WebKitLeft:
+        case TextAlignMode::WebKitRight:
+        case TextAlignMode::WebKitCenter:
             break;
         }
 
-        textBlockStyle.setDirection(LTR);
+        textBlockStyle.setDirection(TextDirection::LTR);
     }
 #endif
 }

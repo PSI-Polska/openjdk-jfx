@@ -51,14 +51,14 @@ public:
     SimpleTypedArrayController();
     virtual ~SimpleTypedArrayController();
 
-    JSArrayBuffer* toJS(ExecState*, JSGlobalObject*, ArrayBuffer*) override;
+    JSArrayBuffer* toJS(JSGlobalObject*, JSGlobalObject*, ArrayBuffer*) override;
     void registerWrapper(JSGlobalObject*, ArrayBuffer*, JSArrayBuffer*) override;
     bool isAtomicsWaitAllowedOnCurrentThread() override;
 
 private:
     class JSArrayBufferOwner : public WeakHandleOwner {
     public:
-        bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, SlotVisitor&) override;
+        bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, SlotVisitor&, const char** reason) override;
         void finalize(JSC::Handle<JSC::Unknown>, void* context) override;
     };
 

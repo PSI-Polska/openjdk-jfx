@@ -34,12 +34,11 @@ class MarkedArgumentBuffer : public RecordOverflow {
     friend class VM;
     friend class ArgList;
 
-private:
+public:
     using Base = RecordOverflow;
     static const size_t inlineCapacity = 8;
     typedef HashSet<MarkedArgumentBuffer*> ListSet;
 
-public:
     // Constructor for a read-write list, to which you may append values.
     // FIXME: Remove all clients of this API, then remove this API.
     MarkedArgumentBuffer()
@@ -57,7 +56,7 @@ public:
             m_markSet->remove(this);
 
         if (EncodedJSValue* base = mallocBase())
-            fastFree(base);
+            Gigacage::free(Gigacage::JSValue, base);
     }
 
     size_t size() const { return m_size; }
@@ -111,6 +110,13 @@ public:
         return JSValue::decode(slotFor(m_size - 1));
     }
 
+    JSValue takeLast()
+    {
+        JSValue result = last();
+        removeLast();
+        return result;
+    }
+
     static void markLists(SlotVisitor&, ListSet&);
 
     void ensureCapacity(size_t requestedCapacity)
@@ -126,6 +132,17 @@ public:
     }
 
     void overflowCheckNotNeeded() { clearNeedsOverflowCheck(); }
+
+    template<typename Functor>
+    void fill(size_t count, const Functor& func)
+    {
+        ASSERT(!m_size);
+        ensureCapacity(count);
+        if (Base::hasOverflowed())
+            return;
+        m_size = count;
+        func(reinterpret_cast<JSValue*>(&slotFor(0)));
+    }
 
 private:
     void expandCapacity();
@@ -148,15 +165,15 @@ private:
         return &slotFor(0);
     }
 
-#if ASSERT_DISABLED
-    void setNeedsOverflowCheck() { }
-    void clearNeedsOverflowCheck() { }
-#else
+#if ASSERT_ENABLED
     void setNeedsOverflowCheck() { m_needsOverflowCheck = true; }
     void clearNeedsOverflowCheck() { m_needsOverflowCheck = false; }
 
     bool m_needsOverflowCheck { false };
-#endif
+#else
+    void setNeedsOverflowCheck() { }
+    void clearNeedsOverflowCheck() { }
+#endif // ASSERT_ENABLED
     int m_size;
     int m_capacity;
     EncodedJSValue m_inlineBuffer[inlineCapacity];
@@ -165,6 +182,7 @@ private:
 };
 
 class ArgList {
+    WTF_MAKE_FAST_ALLOCATED;
     friend class Interpreter;
     friend class JIT;
 public:
@@ -174,9 +192,9 @@ public:
     {
     }
 
-    ArgList(ExecState* exec)
-        : m_args(reinterpret_cast<JSValue*>(&exec[CallFrame::argumentOffset(0)]))
-        , m_argCount(exec->argumentCount())
+    ArgList(CallFrame* callFrame)
+        : m_args(reinterpret_cast<JSValue*>(&callFrame[CallFrame::argumentOffset(0)]))
+        , m_argCount(callFrame->argumentCount())
     {
     }
 

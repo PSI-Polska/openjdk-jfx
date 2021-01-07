@@ -38,17 +38,26 @@ namespace WebCore {
 #endif
 
 #define WEBCORE_LOG_CHANNELS(M) \
+    M(AdClickAttribution) \
     M(Animations) \
+    M(ApplePay) \
     M(Archives) \
+    M(BackForwardCache) \
+    M(Calc) \
+    M(ClipRects) \
     M(Compositing) \
+    M(CompositingOverlap) \
     M(ContentFiltering) \
+    M(ContentObservation) \
     M(DatabaseTracker) \
     M(DisplayLists) \
     M(DOMTimers) \
     M(Editing) \
+    M(EME) \
     M(Events) \
     M(FileAPI) \
     M(Filters) \
+    M(Fonts) \
     M(Frames) \
     M(FTP) \
     M(Fullscreen) \
@@ -62,6 +71,7 @@ namespace WebCore {
     M(IndexedDBOperations) \
     M(Layers) \
     M(Layout) \
+    M(FormattingContextLayout) \
     M(Loading) \
     M(Media) \
     M(MediaCaptureSamples) \
@@ -73,7 +83,6 @@ namespace WebCore {
     M(MessagePorts) \
     M(Network) \
     M(NotYetImplemented) \
-    M(PageCache) \
     M(PerformanceLogging) \
     M(PlatformLeaks) \
     M(Plugins) \
@@ -89,6 +98,7 @@ namespace WebCore {
     M(ServiceWorker) \
     M(SpellingAndGrammar) \
     M(SQLDatabase) \
+    M(Storage) \
     M(StorageAPI) \
     M(SVG) \
     M(TextAutosizing) \
@@ -100,7 +110,8 @@ namespace WebCore {
     M(WebGL) \
     M(WebGPU) \
     M(WebRTC) \
-    M(WheelEventTestTriggers) \
+    M(WebRTCStats) \
+    M(WheelEventTestMonitor) \
 
 #undef DECLARE_LOG_CHANNEL
 #define DECLARE_LOG_CHANNEL(name) \
@@ -110,7 +121,6 @@ WEBCORE_LOG_CHANNELS(DECLARE_LOG_CHANNEL)
 
 String logLevelString();
 bool isLogChannelEnabled(const String& name);
-WEBCORE_EXPORT void setLogChannelToAccumulate(const String& name);
 
 #endif // !LOG_DISABLED || !RELEASE_LOG_DISABLED
 

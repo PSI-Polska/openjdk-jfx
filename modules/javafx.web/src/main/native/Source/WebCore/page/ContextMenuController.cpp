@@ -35,6 +35,7 @@
 #include "ContextMenuClient.h"
 #include "ContextMenuItem.h"
 #include "ContextMenuProvider.h"
+#include "CustomHeaderFields.h"
 #include "Document.h"
 #include "DocumentFragment.h"
 #include "DocumentLoader.h"
@@ -43,6 +44,7 @@
 #include "Event.h"
 #include "EventHandler.h"
 #include "FormState.h"
+#include "Frame.h"
 #include "FrameLoadRequest.h"
 #include "FrameLoader.h"
 #include "FrameLoaderClient.h"
@@ -53,7 +55,6 @@
 #include "HitTestResult.h"
 #include "InspectorController.h"
 #include "LocalizedStrings.h"
-#include "MainFrame.h"
 #include "MouseEvent.h"
 #include "NavigationAction.h"
 #include "Node.h"
@@ -68,13 +69,14 @@
 #include "UserTypingGestureIndicator.h"
 #include "WindowFeatures.h"
 #include "markup.h"
+#include <wtf/SetForScope.h>
 #include <wtf/WallTime.h>
 #include <wtf/unicode/CharacterNames.h>
 
 
 namespace WebCore {
-using namespace WTF;
-using namespace Unicode;
+
+using namespace WTF::Unicode;
 
 ContextMenuController::ContextMenuController(Page& page, ContextMenuClient& client)
     : m_page(page)
@@ -97,6 +99,11 @@ void ContextMenuController::clearContextMenu()
 
 void ContextMenuController::handleContextMenuEvent(Event& event)
 {
+    if (m_isHandlingContextMenuEvent)
+        return;
+
+    SetForScope<bool> isHandlingContextMenuEventForScope(m_isHandlingContextMenuEvent, true);
+
     m_contextMenu = maybeCreateContextMenu(event);
     if (!m_contextMenu)
         return;
@@ -157,7 +164,7 @@ std::unique_ptr<ContextMenu> ContextMenuController::maybeCreateContextMenu(Event
     if (!frame)
         return nullptr;
 
-    auto result = frame->eventHandler().hitTestResultAtPoint(mouseEvent.absoluteLocation());
+    auto result = frame->eventHandler().hitTestResultAtPoint(mouseEvent.absoluteLocation(), HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::DisallowUserAgentShadowContent | HitTestRequest::AllowChildFrameContent);
     if (!result.innerNonSharedNode())
         return nullptr;
 
@@ -173,7 +180,7 @@ std::unique_ptr<ContextMenu> ContextMenuController::maybeCreateContextMenu(Event
     }
 #endif
 
-    return std::make_unique<ContextMenu>();
+    return makeUnique<ContextMenu>();
 }
 
 void ContextMenuController::showContextMenu(Event& event)
@@ -196,7 +203,7 @@ static void openNewWindow(const URL& urlToLoad, Frame& frame, ShouldOpenExternal
     if (!newPage)
         return;
     newPage->chrome().show();
-    newPage->mainFrame().loader().loadFrameRequest(WTFMove(frameLoadRequest), nullptr, nullptr);
+    newPage->mainFrame().loader().loadFrameRequest(WTFMove(frameLoadRequest), nullptr, { });
 }
 
 #if PLATFORM(GTK)
@@ -351,16 +358,17 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
     case ContextMenuItemTagUnicodeInsertZWNJMark:
         insertUnicodeCharacter(zeroWidthNonJoiner, *frame);
         break;
-#endif
-#if PLATFORM(GTK)
     case ContextMenuItemTagSelectAll:
         frame->editor().command("SelectAll").execute();
+        break;
+    case ContextMenuItemTagInsertEmoji:
+        m_client.insertEmoji(*frame);
         break;
 #endif
     case ContextMenuItemTagSpellingGuess: {
         VisibleSelection selection = frame->selection().selection();
         if (frame->editor().shouldInsertText(title, selection.toNormalizedRange().get(), EditorInsertAction::Pasted)) {
-            ReplaceSelectionCommand::CommandOptions replaceOptions = ReplaceSelectionCommand::MatchStyle | ReplaceSelectionCommand::PreventNesting;
+            OptionSet<ReplaceSelectionCommand::CommandOption> replaceOptions { ReplaceSelectionCommand::MatchStyle, ReplaceSelectionCommand::PreventNesting };
 
             if (frame->editor().behavior().shouldAllowSpellingSuggestionsWithoutSelection()) {
                 ASSERT(selection.isCaretOrRange());
@@ -369,7 +377,7 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
                 frame->selection().setSelection(wordSelection);
             } else {
                 ASSERT(frame->editor().selectedText().length());
-                replaceOptions |= ReplaceSelectionCommand::SelectReplacement;
+                replaceOptions.add(ReplaceSelectionCommand::SelectReplacement);
             }
 
             Document* document = frame->document();
@@ -397,7 +405,7 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
         if (Frame* targetFrame = m_context.hitTestResult().targetFrame()) {
             ResourceRequest resourceRequest { m_context.hitTestResult().absoluteLinkURL(), frame->loader().outgoingReferrer() };
             FrameLoadRequest frameLoadRequest { *frame->document(), frame->document()->securityOrigin(), resourceRequest, { }, LockHistory::No, LockBackForwardList::No, MaybeSendReferrer, AllowNavigationToInvalidURL::Yes, NewFrameOpenerPolicy::Suppress, targetFrame->isMainFrame() ? ShouldOpenExternalURLsPolicy::ShouldAllow : ShouldOpenExternalURLsPolicy::ShouldNotAllow, InitiatedByMainFrame::Unknown };
-            targetFrame->loader().loadFrameRequest(WTFMove(frameLoadRequest), nullptr, nullptr);
+            targetFrame->loader().loadFrameRequest(WTFMove(frameLoadRequest), nullptr,  { });
         } else
             openNewWindow(m_context.hitTestResult().absoluteLinkURL(), *frame, ShouldOpenExternalURLsPolicy::ShouldAllow);
         break;
@@ -429,13 +437,13 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
         m_client.stopSpeaking();
         break;
     case ContextMenuItemTagDefaultDirection:
-        frame->editor().setBaseWritingDirection(NaturalWritingDirection);
+        frame->editor().setBaseWritingDirection(WritingDirection::Natural);
         break;
     case ContextMenuItemTagLeftToRight:
-        frame->editor().setBaseWritingDirection(LeftToRightWritingDirection);
+        frame->editor().setBaseWritingDirection(WritingDirection::LeftToRight);
         break;
     case ContextMenuItemTagRightToLeft:
-        frame->editor().setBaseWritingDirection(RightToLeftWritingDirection);
+        frame->editor().setBaseWritingDirection(WritingDirection::RightToLeft);
         break;
     case ContextMenuItemTagTextDirectionDefault:
         frame->editor().command("MakeTextWritingDirectionNatural").execute();
@@ -805,9 +813,8 @@ void ContextMenuController::populate()
     ContextMenuItem PasteItem(ActionType, ContextMenuItemTagPaste, contextMenuItemTagPaste());
 #if PLATFORM(GTK)
     ContextMenuItem DeleteItem(ActionType, ContextMenuItemTagDelete, contextMenuItemTagDelete());
-#endif
-#if PLATFORM(GTK)
     ContextMenuItem SelectAllItem(ActionType, ContextMenuItemTagSelectAll, contextMenuItemTagSelectAll());
+    ContextMenuItem InsertEmojiItem(ActionType, ContextMenuItemTagInsertEmoji, contextMenuItemTagInsertEmoji());
 #endif
 
 #if PLATFORM(GTK) || PLATFORM(WIN)
@@ -879,11 +886,12 @@ void ContextMenuController::populate()
 #if PLATFORM(MAC) && ENABLE(VIDEO_PRESENTATION_MODE)
             appendItem(ToggleVideoEnhancedFullscreen, m_contextMenu.get());
 #endif
-            appendItem(*separatorItem(), m_contextMenu.get());
-            appendItem(CopyMediaLinkItem, m_contextMenu.get());
-            appendItem(OpenMediaInNewWindowItem, m_contextMenu.get());
-            if (m_context.hitTestResult().isDownloadableMedia() && loader.client().canHandleRequest(ResourceRequest(mediaURL)))
+            if (m_context.hitTestResult().isDownloadableMedia() && loader.client().canHandleRequest(ResourceRequest(mediaURL))) {
+                appendItem(*separatorItem(), m_contextMenu.get());
+                appendItem(CopyMediaLinkItem, m_contextMenu.get());
+                appendItem(OpenMediaInNewWindowItem, m_contextMenu.get());
                 appendItem(DownloadMediaItem, m_contextMenu.get());
+            }
         }
 
         if (imageURL.isEmpty() && linkURL.isEmpty() && mediaURL.isEmpty()) {
@@ -1043,9 +1051,8 @@ void ContextMenuController::populate()
 #if PLATFORM(GTK)
         appendItem(DeleteItem, m_contextMenu.get());
         appendItem(*separatorItem(), m_contextMenu.get());
-#endif
-#if PLATFORM(GTK)
         appendItem(SelectAllItem, m_contextMenu.get());
+        appendItem(InsertEmojiItem, m_contextMenu.get());
 #endif
 
         if (!inPasswordField) {
@@ -1200,6 +1207,10 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
         case ContextMenuItemTagDelete:
             shouldEnable = frame->editor().canDelete();
             break;
+        case ContextMenuItemTagInsertEmoji:
+            shouldEnable = frame->editor().canEdit();
+            break;
+        case ContextMenuItemTagSelectAll:
         case ContextMenuItemTagInputMethods:
         case ContextMenuItemTagUnicode:
         case ContextMenuItemTagUnicodeInsertLRMMark:
@@ -1212,11 +1223,6 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
         case ContextMenuItemTagUnicodeInsertZWSMark:
         case ContextMenuItemTagUnicodeInsertZWJMark:
         case ContextMenuItemTagUnicodeInsertZWNJMark:
-            shouldEnable = true;
-            break;
-#endif
-#if PLATFORM(GTK)
-        case ContextMenuItemTagSelectAll:
             shouldEnable = true;
             break;
 #endif
@@ -1336,7 +1342,7 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
             break;
         case ContextMenuItemTagDownloadImageToDisk:
 #if PLATFORM(MAC)
-            if (WebCore::protocolIs(m_context.hitTestResult().absoluteImageURL(), "file"))
+            if (WTF::protocolIs(m_context.hitTestResult().absoluteImageURL(), "file"))
                 shouldEnable = false;
 #endif
             break;
@@ -1351,7 +1357,7 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
                 item.setTitle(contextMenuItemTagDownloadVideoToDisk());
             else
                 item.setTitle(contextMenuItemTagDownloadAudioToDisk());
-            if (WebCore::protocolIs(m_context.hitTestResult().absoluteImageURL(), "file"))
+            if (WTF::protocolIs(m_context.hitTestResult().absoluteImageURL(), "file"))
                 shouldEnable = false;
             break;
         case ContextMenuItemTagCopyMediaLinkToClipboard:

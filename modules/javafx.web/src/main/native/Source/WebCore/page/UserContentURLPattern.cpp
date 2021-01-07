@@ -26,9 +26,9 @@
 #include "config.h"
 #include "UserContentURLPattern.h"
 
-#include "URL.h"
 #include <wtf/NeverDestroyed.h>
 #include <wtf/StdLibExtras.h>
+#include <wtf/URL.h>
 
 namespace WebCore {
 
@@ -114,7 +114,7 @@ bool UserContentURLPattern::matches(const URL& test) const
     if (m_invalid)
         return false;
 
-    if (!equalIgnoringASCIICase(test.protocol(), m_scheme))
+    if (m_scheme != "*" && !equalIgnoringASCIICase(test.protocol(), m_scheme))
         return false;
 
     if (!equalLettersIgnoringASCIICase(m_scheme, "file") && !matchesHost(test))
@@ -125,7 +125,7 @@ bool UserContentURLPattern::matches(const URL& test) const
 
 bool UserContentURLPattern::matchesHost(const URL& test) const
 {
-    const String& host = test.host();
+    auto host = test.host();
     if (equalIgnoringASCIICase(host, m_host))
         return true;
 

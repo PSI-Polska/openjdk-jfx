@@ -27,8 +27,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FloatPolygon_h
-#define FloatPolygon_h
+#pragma once
 
 #include "FloatPoint.h"
 #include "FloatRect.h"
@@ -54,12 +53,11 @@ public:
     unsigned numberOfEdges() const { return m_edges.size(); }
 
     FloatRect boundingBox() const { return m_boundingBox; }
-    bool overlappingEdges(float minY, float maxY, Vector<const FloatPolygonEdge*>& result) const;
+    Vector<std::reference_wrapper<const FloatPolygonEdge>> overlappingEdges(float minY, float maxY) const;
     bool contains(const FloatPoint&) const;
     bool isEmpty() const { return m_empty; }
 
 private:
-    typedef PODInterval<float, FloatPolygonEdge*> EdgeInterval;
     typedef PODIntervalTree<float, FloatPolygonEdge*> EdgeIntervalTree;
 
     bool containsNonZero(const FloatPoint&) const;
@@ -131,17 +129,8 @@ private:
     const FloatPolygon* m_polygon;
 };
 
-} // namespace WebCore
-
-// This structure is used by PODIntervalTree for debugging.
 #ifndef NDEBUG
-namespace WTF {
-
-template<> struct ValueToString<WebCore::FloatPolygonEdge*> {
-    static String string(const WebCore::FloatPolygonEdge* edge) { return String::format("%p (%f,%f %f,%f)", edge, edge->vertex1().x(), edge->vertex1().y(), edge->vertex2().x(), edge->vertex2().y()); }
-};
-
-}
+TextStream& operator<<(TextStream&, const FloatPolygonEdge&);
 #endif
 
-#endif // FloatPolygon_h
+} // namespace WebCore

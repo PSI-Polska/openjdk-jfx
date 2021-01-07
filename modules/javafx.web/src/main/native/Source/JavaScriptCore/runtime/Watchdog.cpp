@@ -27,12 +27,10 @@
 #include "Watchdog.h"
 
 #include "CallFrame.h"
-#include <wtf/CurrentTime.h>
+#include <wtf/CPUTime.h>
 #include <wtf/MathExtras.h>
 
 namespace JSC {
-
-const Seconds Watchdog::noTimeLimit { Seconds::infinity() };
 
 Watchdog::Watchdog(VM* vm)
     : m_vm(vm)
@@ -60,7 +58,7 @@ void Watchdog::setTimeLimit(Seconds limit,
         startTimer(m_timeLimit);
 }
 
-bool Watchdog::shouldTerminate(ExecState* exec)
+bool Watchdog::shouldTerminate(JSGlobalObject* globalObject)
 {
     ASSERT(m_vm->currentThreadIsHoldingAPILock());
     if (MonotonicTime::now() < m_deadline)
@@ -70,7 +68,7 @@ bool Watchdog::shouldTerminate(ExecState* exec)
     // spurious wakes.
     m_deadline = MonotonicTime::infinity();
 
-    auto cpuTime = currentCPUTime();
+    auto cpuTime = CPUTime::forCurrentThread();
     if (cpuTime < m_cpuDeadline) {
         auto remainingCPUTime = m_cpuDeadline - cpuTime;
         startTimer(remainingCPUTime);
@@ -83,7 +81,7 @@ bool Watchdog::shouldTerminate(ExecState* exec)
     // If m_callback is not set, then we terminate by default.
     // Else, we let m_callback decide if we should terminate or not.
     bool needsTermination = !m_callback
-        || m_callback(exec, m_callbackData1, m_callbackData2);
+        || m_callback(globalObject, m_callbackData1, m_callbackData2);
     if (needsTermination)
         return true;
 
@@ -131,7 +129,7 @@ void Watchdog::startTimer(Seconds timeLimit)
     ASSERT(hasTimeLimit());
     ASSERT(timeLimit <= m_timeLimit);
 
-    m_cpuDeadline = currentCPUTime() + timeLimit;
+    m_cpuDeadline = CPUTime::forCurrentThread() + timeLimit;
     auto now = MonotonicTime::now();
     auto deadline = now + timeLimit;
 

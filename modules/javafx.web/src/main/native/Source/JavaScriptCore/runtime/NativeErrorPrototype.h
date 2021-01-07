@@ -24,24 +24,24 @@
 
 namespace JSC {
 
-class NativeErrorConstructor;
-
-class NativeErrorPrototype : public ErrorPrototype {
+class NativeErrorPrototype final : public ErrorPrototypeBase {
 private:
     NativeErrorPrototype(VM&, Structure*);
 
 public:
-    typedef ErrorPrototype Base;
+    typedef ErrorPrototypeBase Base;
 
-    static NativeErrorPrototype* create(VM& vm, Structure* structure, const String& name, NativeErrorConstructor* constructor)
+    static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
     {
-        NativeErrorPrototype* prototype = new (NotNull, allocateCell<NativeErrorPrototype>(vm.heap)) NativeErrorPrototype(vm, structure);
-        prototype->finishCreation(vm, name, constructor);
-        return prototype;
+        return Structure::create(vm, globalObject, prototype, TypeInfo(ErrorInstanceType, StructureFlags), info());
     }
 
-protected:
-    void finishCreation(VM&, const String& nameAndMessage, NativeErrorConstructor*);
+    static NativeErrorPrototype* create(VM& vm, Structure* structure, const String& name)
+    {
+        NativeErrorPrototype* prototype = new (NotNull, allocateCell<NativeErrorPrototype>(vm.heap)) NativeErrorPrototype(vm, structure);
+        prototype->finishCreation(vm, name);
+        return prototype;
+    }
 };
 
 } // namespace JSC

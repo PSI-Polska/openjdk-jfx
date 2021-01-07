@@ -34,7 +34,11 @@
 #include "CDM.h"
 #include "CDMClient.h"
 #include "CDMInstance.h"
+#include "EventLoop.h"
+#include "JSDOMPromiseDeferred.h"
+#include "Logging.h"
 #include "MediaKeySession.h"
+#include "ScriptExecutionContext.h"
 #include "SharedBuffer.h"
 
 namespace WebCore {
@@ -54,6 +58,7 @@ ExceptionOr<Ref<MediaKeySession>> MediaKeys::createSession(ScriptExecutionContex
 {
     // https://w3c.github.io/encrypted-media/#dom-mediakeys-setservercertificate
     // W3C Editor's Draft 09 November 2016
+    LOG(EME, "EME - check if a new session can be created");
 
     // When this method is invoked, the user agent must run the following steps:
     // 1. If this object's supported session types value does not contain sessionType, throw [WebIDL] a NotSupportedError.
@@ -64,15 +69,19 @@ ExceptionOr<Ref<MediaKeySession>> MediaKeys::createSession(ScriptExecutionContex
     if (!m_implementation->supportsSessions())
         return Exception(InvalidStateError);
 
+    auto instanceSession = m_instance->createSession();
+    if (!instanceSession)
+        return Exception(InvalidStateError);
+
     // 3. Let session be a new MediaKeySession object, and initialize it as follows:
     // NOTE: Continued in MediaKeySession.
     // 4. Return session.
-    auto session = MediaKeySession::create(context, m_weakPtrFactory.createWeakPtr(*this), sessionType, m_useDistinctiveIdentifier, m_implementation.copyRef(), m_instance.copyRef());
+    auto session = MediaKeySession::create(context, makeWeakPtr(*this), sessionType, m_useDistinctiveIdentifier, m_implementation.copyRef(), instanceSession.releaseNonNull());
     m_sessions.append(session.copyRef());
-    return WTFMove(session);
+    return session;
 }
 
-void MediaKeys::setServerCertificate(const BufferSource& serverCertificate, Ref<DeferredPromise>&& promise)
+void MediaKeys::setServerCertificate(ScriptExecutionContext& context, const BufferSource& serverCertificate, Ref<DeferredPromise>&& promise)
 {
     // https://w3c.github.io/encrypted-media/#dom-mediakeys-setservercertificate
     // W3C Editor's Draft 09 November 2016
@@ -97,7 +106,7 @@ void MediaKeys::setServerCertificate(const BufferSource& serverCertificate, Ref<
     // 4. Let promise be a new promise.
     // 5. Run the following steps in parallel:
 
-    m_taskQueue.enqueueTask([this, certificate = WTFMove(certificate), promise = WTFMove(promise)] () mutable {
+    context.eventLoop().queueTask(TaskSource::Networking, [this, certificate = WTFMove(certificate), promise = WTFMove(promise)] () mutable {
         // 5.1. Use this object's cdm instance to process certificate.
         if (m_instance->setServerCertificate(WTFMove(certificate)) == CDMInstance::Failed) {
             // 5.2. If the preceding step failed, resolve promise with a new DOMException whose name is the appropriate error name.

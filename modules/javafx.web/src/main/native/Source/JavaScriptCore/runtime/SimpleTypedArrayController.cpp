@@ -35,15 +35,14 @@ namespace JSC {
 SimpleTypedArrayController::SimpleTypedArrayController() { }
 SimpleTypedArrayController::~SimpleTypedArrayController() { }
 
-JSArrayBuffer* SimpleTypedArrayController::toJS(
-    ExecState* exec, JSGlobalObject* globalObject, ArrayBuffer* native)
+JSArrayBuffer* SimpleTypedArrayController::toJS(JSGlobalObject* lexicalGlobalObject, JSGlobalObject* globalObject, ArrayBuffer* native)
 {
+    UNUSED_PARAM(lexicalGlobalObject);
     if (JSArrayBuffer* buffer = native->m_wrapper.get())
         return buffer;
 
     // The JSArrayBuffer::create function will register the wrapper in finishCreation.
-    JSArrayBuffer* result = JSArrayBuffer::create(
-        exec->vm(), globalObject->arrayBufferStructure(native->sharingMode()), native);
+    JSArrayBuffer* result = JSArrayBuffer::create(globalObject->vm(), globalObject->arrayBufferStructure(native->sharingMode()), native);
     return result;
 }
 
@@ -58,8 +57,10 @@ bool SimpleTypedArrayController::isAtomicsWaitAllowedOnCurrentThread()
     return true;
 }
 
-bool SimpleTypedArrayController::JSArrayBufferOwner::isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown> handle, void*, JSC::SlotVisitor& visitor)
+bool SimpleTypedArrayController::JSArrayBufferOwner::isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown> handle, void*, JSC::SlotVisitor& visitor, const char** reason)
 {
+    if (UNLIKELY(reason))
+        *reason = "JSArrayBuffer is opaque root";
     auto& wrapper = *JSC::jsCast<JSC::JSArrayBuffer*>(handle.slot()->asCell());
     return visitor.containsOpaqueRoot(wrapper.impl());
 }

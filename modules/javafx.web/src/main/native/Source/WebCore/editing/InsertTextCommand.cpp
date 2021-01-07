@@ -59,18 +59,16 @@ Position InsertTextCommand::positionInsideTextNode(const Position& p)
     Position pos = p;
     if (isTabSpanTextNode(pos.anchorNode())) {
         auto textNode = document().createEditingTextNode(emptyString());
-        auto* textNodePtr = textNode.ptr();
-        insertNodeAtTabSpanPosition(WTFMove(textNode), pos);
-        return firstPositionInNode(textNodePtr);
+        insertNodeAtTabSpanPosition(textNode.copyRef(), pos);
+        return firstPositionInNode(textNode.ptr());
     }
 
     // Prepare for text input by looking at the specified position.
     // It may be necessary to insert a text node to receive characters.
     if (!pos.containerNode()->isTextNode()) {
         auto textNode = document().createEditingTextNode(emptyString());
-        auto* textNodePtr = textNode.ptr();
-        insertNodeAt(WTFMove(textNode), pos);
-        return firstPositionInNode(textNodePtr);
+        insertNodeAt(textNode.copyRef(), pos);
+        return firstPositionInNode(textNode.ptr());
     }
 
     return pos;
@@ -206,7 +204,7 @@ void InsertTextCommand::doApply()
         insertTextIntoNode(*textNode, offset, m_text);
         endPosition = Position(textNode.get(), offset + m_text.length());
         if (m_markerSupplier)
-            m_markerSupplier->addMarkersToTextNode(textNode.get(), offset, m_text);
+            m_markerSupplier->addMarkersToTextNode(*textNode, offset, m_text);
 
         if (m_rebalanceType == RebalanceLeadingAndTrailingWhitespaces) {
             // The insertion may require adjusting adjacent whitespace, if it is present.

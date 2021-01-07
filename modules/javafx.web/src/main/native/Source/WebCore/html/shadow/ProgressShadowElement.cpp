@@ -34,8 +34,11 @@
 #include "HTMLNames.h"
 #include "HTMLProgressElement.h"
 #include "RenderProgress.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(ProgressShadowElement);
 
 using namespace HTMLNames;
 
@@ -83,7 +86,7 @@ ProgressValueElement::ProgressValueElement(Document& document)
 
 void ProgressValueElement::setWidthPercentage(double width)
 {
-    setInlineStyleProperty(CSSPropertyWidth, width, CSSPrimitiveValue::CSS_PERCENTAGE);
+    setInlineStyleProperty(CSSPropertyWidth, width, CSSUnitType::CSS_PERCENTAGE);
 }
 
 }

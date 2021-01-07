@@ -26,11 +26,11 @@
 #include "config.h"
 #include "LoadTiming.h"
 
+#include "CustomHeaderFields.h"
 #include "Document.h"
 #include "DocumentLoader.h"
 #include "Frame.h"
 #include "SecurityOrigin.h"
-#include <wtf/CurrentTime.h>
 #include <wtf/RefPtr.h>
 
 namespace WebCore {

@@ -37,21 +37,11 @@
 #include <pal/spi/cf/CFNetworkSPI.h>
 #endif
 
-#if USE(CURL) && PLATFORM(WIN)
-#include <winsock2.h>
-#include <windows.h>
-#endif
-
 #if USE(CURL)
-#include "ResourceHandleCurlDelegate.h"
-#endif
-
-#if USE(SOUP)
-#include "GUniquePtrSoup.h"
-#include "SoupNetworkSession.h"
-#include <libsoup/soup.h>
-#include <wtf/RunLoop.h>
-#include <wtf/glib/GRefPtr.h>
+#include "CurlRequest.h"
+#include "SynchronousLoaderClient.h"
+#include <wtf/MessageQueue.h>
+#include <wtf/MonotonicTime.h>
 #endif
 
 #if PLATFORM(COCOA)
@@ -73,8 +63,10 @@ typedef const struct __CFURLStorageSession* CFURLStorageSessionRef;
 
 namespace WebCore {
 
+DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(ResourceHandleInternal);
 class ResourceHandleInternal {
-    WTF_MAKE_NONCOPYABLE(ResourceHandleInternal); WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_NONCOPYABLE(ResourceHandleInternal);
+    WTF_MAKE_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(ResourceHandleInternal);
 public:
     ResourceHandleInternal(ResourceHandle* loader, NetworkingContext* context, const ResourceRequest& request, ResourceHandleClient* client, bool defersLoading, bool shouldContentSniff, bool shouldContentEncodingSniff)
         : m_context(context)
@@ -87,9 +79,6 @@ public:
         , m_shouldContentEncodingSniff(shouldContentEncodingSniff)
 #if USE(CFURLCONNECTION)
         , m_currentRequest(request)
-#endif
-#if USE(SOUP)
-        , m_timeoutSource(RunLoop::main(), loader, &ResourceHandle::timeoutFired)
 #endif
         , m_failureTimer(*loader, &ResourceHandle::failureTimerFired)
     {
@@ -136,33 +125,17 @@ public:
     RetainPtr<CFURLStorageSessionRef> m_storageSession;
 #endif
 #if USE(CURL)
-    RefPtr<ResourceHandleCurlDelegate> m_delegate;
-    ResourceResponse m_response;
+    std::unique_ptr<CurlResourceHandleDelegate> m_delegate;
+
+    bool m_cancelled { false };
+    unsigned m_redirectCount { 0 };
+    unsigned m_authFailureCount { 0 };
+    bool m_addedCacheValidationHeaders { false };
+    RefPtr<CurlRequest> m_curlRequest;
+    RefPtr<SynchronousLoaderMessageQueue> m_messageQueue;
+    MonotonicTime m_startTime;
 #endif
 
-#if USE(SOUP)
-    SoupNetworkSession* m_session { nullptr };
-    GRefPtr<SoupMessage> m_soupMessage;
-    ResourceResponse m_response;
-    bool m_cancelled { false };
-    GRefPtr<SoupRequest> m_soupRequest;
-    GRefPtr<GInputStream> m_inputStream;
-    GRefPtr<SoupMultipartInputStream> m_multipartInputStream;
-    GRefPtr<GCancellable> m_cancellable;
-    GRefPtr<GAsyncResult> m_deferredResult;
-    RunLoop::Timer<ResourceHandle> m_timeoutSource;
-    GUniquePtr<SoupBuffer> m_soupBuffer;
-    unsigned long m_bodySize { 0 };
-    unsigned long m_bodyDataSent { 0 };
-    SoupSession* soupSession();
-    int m_redirectCount { 0 };
-    size_t m_previousPosition { 0 };
-    bool m_useAuthenticationManager { true };
-    struct {
-        Credential credential;
-        ProtectionSpace protectionSpace;
-    } m_credentialDataToSaveInPersistentStore;
-#endif
 #if PLATFORM(JAVA)
     std::unique_ptr<URLLoader> m_loader;
 #endif

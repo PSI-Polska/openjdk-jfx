@@ -31,6 +31,7 @@
 #include "HeapCellType.h"
 #include "JSCInlines.h"
 #include "MarkedBlockInlines.h"
+#include "MarkedSpaceInlines.h"
 #include "ParallelSourceAdapter.h"
 #include "PreventCollectionScope.h"
 #include "SubspaceInlines.h"
@@ -45,13 +46,11 @@ Subspace::Subspace(CString name, Heap& heap)
 
 void Subspace::initialize(HeapCellType* heapCellType, AlignedMemoryAllocator* alignedMemoryAllocator)
 {
-    m_attributes = heapCellType->attributes();
     m_heapCellType = heapCellType;
     m_alignedMemoryAllocator = alignedMemoryAllocator;
     m_directoryForEmptyAllocation = m_alignedMemoryAllocator->firstDirectory();
 
-    Heap& heap = *m_space.heap();
-    PreventCollectionScope preventCollectionScope(heap);
+    Heap& heap = m_space.heap();
     heap.objectSpace().m_subspaces.append(this);
     m_alignedMemoryAllocator->registerSubspace(this);
 }
@@ -89,7 +88,7 @@ MarkedBlock::Handle* Subspace::findEmptyBlockToSteal()
     return nullptr;
 }
 
-RefPtr<SharedTask<BlockDirectory*()>> Subspace::parallelDirectorySource()
+Ref<SharedTask<BlockDirectory*()>> Subspace::parallelDirectorySource()
 {
     class Task : public SharedTask<BlockDirectory*()> {
     public:
@@ -112,10 +111,10 @@ RefPtr<SharedTask<BlockDirectory*()>> Subspace::parallelDirectorySource()
         Lock m_lock;
     };
 
-    return adoptRef(new Task(m_firstDirectory));
+    return adoptRef(*new Task(m_firstDirectory));
 }
 
-RefPtr<SharedTask<MarkedBlock::Handle*()>> Subspace::parallelNotEmptyMarkedBlockSource()
+Ref<SharedTask<MarkedBlock::Handle*()>> Subspace::parallelNotEmptyMarkedBlockSource()
 {
     return createParallelSourceAdapter<BlockDirectory*, MarkedBlock::Handle*>(
         parallelDirectorySource(),
@@ -126,7 +125,7 @@ RefPtr<SharedTask<MarkedBlock::Handle*()>> Subspace::parallelNotEmptyMarkedBlock
         });
 }
 
-void Subspace::sweep()
+void Subspace::sweepBlocks()
 {
     forEachDirectory(
         [&] (BlockDirectory& directory) {
@@ -134,11 +133,11 @@ void Subspace::sweep()
         });
 }
 
-void Subspace::didResizeBits(size_t)
+void Subspace::didResizeBits(unsigned)
 {
 }
 
-void Subspace::didRemoveBlock(size_t)
+void Subspace::didRemoveBlock(unsigned)
 {
 }
 

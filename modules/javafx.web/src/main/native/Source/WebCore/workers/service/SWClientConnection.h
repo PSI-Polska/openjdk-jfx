@@ -32,7 +32,7 @@
 #include "ServiceWorkerTypes.h"
 #include <wtf/CompletionHandler.h>
 #include <wtf/HashMap.h>
-#include <wtf/ThreadSafeRefCounted.h>
+#include <wtf/RefCounted.h>
 
 namespace WebCore {
 
@@ -42,9 +42,9 @@ class SerializedScriptValue;
 class ServiceWorkerContainer;
 class ServiceWorkerRegistration;
 class SharedBuffer;
-enum class ServiceWorkerRegistrationState;
-enum class ServiceWorkerState;
-enum class ShouldNotifyWhenResolved;
+enum class ServiceWorkerRegistrationState : uint8_t;
+enum class ServiceWorkerState : uint8_t;
+enum class ShouldNotifyWhenResolved : bool;
 struct ExceptionData;
 struct MessageWithMessagePorts;
 struct ServiceWorkerClientData;
@@ -53,37 +53,41 @@ struct ServiceWorkerData;
 struct ServiceWorkerFetchResult;
 struct ServiceWorkerRegistrationData;
 
-class SWClientConnection : public ThreadSafeRefCounted<SWClientConnection> {
+class SWClientConnection : public RefCounted<SWClientConnection> {
 public:
     WEBCORE_EXPORT virtual ~SWClientConnection();
 
-    using RegistrationCallback = WTF::CompletionHandler<void(std::optional<ServiceWorkerRegistrationData>&&)>;
-    virtual void matchRegistration(const SecurityOrigin& topOrigin, const URL& clientURL, RegistrationCallback&&) = 0;
+    using RegistrationCallback = CompletionHandler<void(Optional<ServiceWorkerRegistrationData>&&)>;
+    virtual void matchRegistration(SecurityOriginData&& topOrigin, const URL& clientURL, RegistrationCallback&&) = 0;
 
-    using GetRegistrationsCallback = WTF::CompletionHandler<void(Vector<ServiceWorkerRegistrationData>&&)>;
-    virtual void getRegistrations(const SecurityOrigin& topOrigin, const URL& clientURL, GetRegistrationsCallback&&) = 0;
+    using GetRegistrationsCallback = CompletionHandler<void(Vector<ServiceWorkerRegistrationData>&&)>;
+    virtual void getRegistrations(SecurityOriginData&& topOrigin, const URL& clientURL, GetRegistrationsCallback&&) = 0;
 
-    using WhenRegistrationReadyCallback = WTF::Function<void(ServiceWorkerRegistrationData&&)>;
-    virtual void whenRegistrationReady(const SecurityOrigin& topOrigin, const URL& clientURL, WhenRegistrationReadyCallback&&) = 0;
+    using WhenRegistrationReadyCallback = Function<void(ServiceWorkerRegistrationData&&)>;
+    virtual void whenRegistrationReady(const SecurityOriginData& topOrigin, const URL& clientURL, WhenRegistrationReadyCallback&&) = 0;
 
     virtual void addServiceWorkerRegistrationInServer(ServiceWorkerRegistrationIdentifier) = 0;
     virtual void removeServiceWorkerRegistrationInServer(ServiceWorkerRegistrationIdentifier) = 0;
 
-    void scheduleJob(DocumentOrWorkerIdentifier, const ServiceWorkerJobData&);
-    void failedFetchingScript(ServiceWorkerJobIdentifier, const ServiceWorkerRegistrationKey&, const ResourceError&);
+    WEBCORE_EXPORT virtual void scheduleJob(DocumentOrWorkerIdentifier, const ServiceWorkerJobData&);
 
     virtual void didResolveRegistrationPromise(const ServiceWorkerRegistrationKey&) = 0;
 
     virtual void postMessageToServiceWorker(ServiceWorkerIdentifier destination, MessageWithMessagePorts&&, const ServiceWorkerOrClientIdentifier& source) = 0;
 
     virtual SWServerConnectionIdentifier serverConnectionIdentifier() const = 0;
-    virtual bool mayHaveServiceWorkerRegisteredForOrigin(const SecurityOrigin&) const = 0;
+    virtual bool mayHaveServiceWorkerRegisteredForOrigin(const SecurityOriginData&) const = 0;
     virtual void syncTerminateWorker(ServiceWorkerIdentifier) = 0;
 
-    virtual void registerServiceWorkerClient(const SecurityOrigin& topOrigin, const ServiceWorkerClientData&, const std::optional<ServiceWorkerIdentifier>&) = 0;
+    virtual void registerServiceWorkerClient(const SecurityOrigin& topOrigin, const ServiceWorkerClientData&, const Optional<ServiceWorkerRegistrationIdentifier>&, const String& userAgent) = 0;
     virtual void unregisterServiceWorkerClient(DocumentIdentifier) = 0;
 
     virtual void finishFetchingScriptInServer(const ServiceWorkerFetchResult&) = 0;
+
+    virtual void storeRegistrationsOnDiskForTesting(CompletionHandler<void()>&& callback) { callback(); }
+    virtual void isServiceWorkerRunning(ServiceWorkerIdentifier, CompletionHandler<void(bool)>&& callback) { callback(false); }
+
+    WEBCORE_EXPORT void registerServiceWorkerClients();
 
 protected:
     WEBCORE_EXPORT SWClientConnection();
@@ -92,8 +96,8 @@ protected:
     WEBCORE_EXPORT void registrationJobResolvedInServer(ServiceWorkerJobIdentifier, ServiceWorkerRegistrationData&&, ShouldNotifyWhenResolved);
     WEBCORE_EXPORT void unregistrationJobResolvedInServer(ServiceWorkerJobIdentifier, bool unregistrationResult);
     WEBCORE_EXPORT void startScriptFetchForServer(ServiceWorkerJobIdentifier, const ServiceWorkerRegistrationKey&, FetchOptions::Cache);
-    WEBCORE_EXPORT void postMessageToServiceWorkerClient(DocumentIdentifier destinationContextIdentifier, MessageWithMessagePorts&&, ServiceWorkerData&& source, const String& sourceOrigin);
-    WEBCORE_EXPORT void updateRegistrationState(ServiceWorkerRegistrationIdentifier, ServiceWorkerRegistrationState, const std::optional<ServiceWorkerData>&);
+    WEBCORE_EXPORT void postMessageToServiceWorkerClient(DocumentIdentifier destinationContextIdentifier, MessageWithMessagePorts&&, ServiceWorkerData&& source, String&& sourceOrigin);
+    WEBCORE_EXPORT void updateRegistrationState(ServiceWorkerRegistrationIdentifier, ServiceWorkerRegistrationState, const Optional<ServiceWorkerData>&);
     WEBCORE_EXPORT void updateWorkerState(ServiceWorkerIdentifier, ServiceWorkerState);
     WEBCORE_EXPORT void fireUpdateFoundEvent(ServiceWorkerRegistrationIdentifier);
     WEBCORE_EXPORT void setRegistrationLastUpdateTime(ServiceWorkerRegistrationIdentifier, WallTime);
@@ -106,7 +110,7 @@ private:
     virtual void scheduleJobInServer(const ServiceWorkerJobData&) = 0;
 
     enum class IsJobComplete { No, Yes };
-    bool postTaskForJob(ServiceWorkerJobIdentifier, IsJobComplete, WTF::Function<void(ServiceWorkerJob&)>&&);
+    bool postTaskForJob(ServiceWorkerJobIdentifier, IsJobComplete, Function<void(ServiceWorkerJob&)>&&);
 
     HashMap<ServiceWorkerJobIdentifier, DocumentOrWorkerIdentifier> m_scheduledJobSources;
 };

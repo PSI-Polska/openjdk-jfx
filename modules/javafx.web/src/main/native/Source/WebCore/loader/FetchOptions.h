@@ -30,16 +30,17 @@
 
 #include "DocumentIdentifier.h"
 #include "ReferrerPolicy.h"
+#include <wtf/Markable.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
 struct FetchOptions {
-    enum class Destination { EmptyString, Audio, Document, Embed, Font, Image, Manifest, Object, Report, Script, Serviceworker, Sharedworker, Style, Track, Video, Worker, Xslt };
-    enum class Mode { Navigate, SameOrigin, NoCors, Cors };
-    enum class Credentials { Omit, SameOrigin, Include };
-    enum class Cache { Default, NoStore, Reload, NoCache, ForceCache, OnlyIfCached };
-    enum class Redirect { Follow, Error, Manual };
+    enum class Destination : uint8_t { EmptyString, Audio, Document, Embed, Font, Image, Manifest, Object, Report, Script, Serviceworker, Sharedworker, Style, Track, Video, Worker, Xslt };
+    enum class Mode : uint8_t { Navigate, SameOrigin, NoCors, Cors };
+    enum class Credentials : uint8_t { Omit, SameOrigin, Include };
+    enum class Cache : uint8_t { Default, NoStore, Reload, NoCache, ForceCache, OnlyIfCached };
+    enum class Redirect : uint8_t { Follow, Error, Manual };
 
     FetchOptions() = default;
     FetchOptions(Destination, Mode, Credentials, Cache, Redirect, ReferrerPolicy, String&&, bool);
@@ -48,7 +49,7 @@ struct FetchOptions {
     template<class Encoder> void encodePersistent(Encoder&) const;
     template<class Decoder> static bool decodePersistent(Decoder&, FetchOptions&);
     template<class Encoder> void encode(Encoder&) const;
-    template<class Decoder> static std::optional<FetchOptions> decode(Decoder&);
+    template<class Decoder> static Optional<FetchOptions> decode(Decoder&);
 
     Destination destination { Destination::EmptyString };
     Mode mode { Mode::NoCors };
@@ -56,9 +57,9 @@ struct FetchOptions {
     Cache cache { Cache::Default };
     Redirect redirect { Redirect::Follow };
     ReferrerPolicy referrerPolicy { ReferrerPolicy::EmptyString };
-    String integrity;
     bool keepAlive { false };
-    std::optional<DocumentIdentifier> clientIdentifier;
+    String integrity;
+    Markable<DocumentIdentifier, DocumentIdentifier::MarkableTraits> clientIdentifier;
 };
 
 inline FetchOptions::FetchOptions(Destination destination, Mode mode, Credentials credentials, Cache cache, Redirect redirect, ReferrerPolicy referrerPolicy, String&& integrity, bool keepAlive)
@@ -68,8 +69,8 @@ inline FetchOptions::FetchOptions(Destination destination, Mode mode, Credential
     , cache(cache)
     , redirect(redirect)
     , referrerPolicy(referrerPolicy)
-    , integrity(WTFMove(integrity))
     , keepAlive(keepAlive)
+    , integrity(WTFMove(integrity))
 {
 }
 
@@ -85,6 +86,13 @@ inline bool isNonSubresourceRequest(FetchOptions::Destination destination)
         || destination == FetchOptions::Destination::Report
         || destination == FetchOptions::Destination::Serviceworker
         || destination == FetchOptions::Destination::Sharedworker
+        || destination == FetchOptions::Destination::Worker;
+}
+
+inline bool isScriptLikeDestination(FetchOptions::Destination destination)
+{
+    return destination == FetchOptions::Destination::Script
+        || destination == FetchOptions::Destination::Serviceworker
         || destination == FetchOptions::Destination::Worker;
 }
 
@@ -221,22 +229,22 @@ template<class Decoder> inline bool FetchOptions::decodePersistent(Decoder& deco
 template<class Encoder> inline void FetchOptions::encode(Encoder& encoder) const
 {
     encodePersistent(encoder);
-    encoder << clientIdentifier;
+    encoder << clientIdentifier.asOptional();
 }
 
-template<class Decoder> inline std::optional<FetchOptions> FetchOptions::decode(Decoder& decoder)
+template<class Decoder> inline Optional<FetchOptions> FetchOptions::decode(Decoder& decoder)
 {
     FetchOptions options;
     if (!decodePersistent(decoder, options))
-        return std::nullopt;
+        return WTF::nullopt;
 
-    std::optional<std::optional<DocumentIdentifier>> clientIdentifier;
+    Optional<Optional<DocumentIdentifier>> clientIdentifier;
     decoder >> clientIdentifier;
     if (!clientIdentifier)
-        return std::nullopt;
+        return WTF::nullopt;
     options.clientIdentifier = WTFMove(clientIdentifier.value());
 
-    return WTFMove(options);
+    return options;
 }
 
 } // namespace WebCore

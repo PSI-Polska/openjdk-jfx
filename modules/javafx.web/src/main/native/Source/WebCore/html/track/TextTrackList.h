@@ -34,8 +34,9 @@ namespace WebCore {
 class TextTrack;
 
 class TextTrackList final : public TrackListBase {
+    WTF_MAKE_ISO_ALLOCATED(TextTrackList);
 public:
-    static Ref<TextTrackList> create(HTMLMediaElement* element, ScriptExecutionContext* context)
+    static Ref<TextTrackList> create(WeakPtr<HTMLMediaElement> element, ScriptExecutionContext* context)
     {
         return adoptRef(*new TextTrackList(element, context));
     }
@@ -49,7 +50,7 @@ public:
     bool contains(TrackBase&) const override;
 
     TextTrack* item(unsigned index) const;
-    TextTrack* getTrackById(const AtomicString&);
+    TextTrack* getTrackById(const AtomString&);
     TextTrack* lastItem() const { return item(length() - 1); }
 
     void append(Ref<TextTrack>&&);
@@ -59,7 +60,7 @@ public:
     EventTargetInterface eventTargetInterface() const override;
 
 private:
-    TextTrackList(HTMLMediaElement*, ScriptExecutionContext*);
+    TextTrackList(WeakPtr<HTMLMediaElement>, ScriptExecutionContext*);
 
     void invalidateTrackIndexesAfterTrack(TextTrack&);
 

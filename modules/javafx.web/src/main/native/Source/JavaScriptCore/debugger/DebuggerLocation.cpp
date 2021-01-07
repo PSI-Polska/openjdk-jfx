@@ -26,6 +26,7 @@
 #include "config.h"
 #include "DebuggerLocation.h"
 
+#include "JSCellInlines.h"
 #include "ScriptExecutable.h"
 
 namespace JSC {
@@ -40,7 +41,7 @@ DebuggerLocation::DebuggerLocation(ScriptExecutable* executable)
     column = executable->startColumn();
     url = executable->sourceURL();
     if (url.isEmpty())
-        url = executable->source().provider()->sourceURL();
+        url = executable->source().provider()->sourceURLDirective();
 }
 
 } // namespace JSC

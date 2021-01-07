@@ -3,6 +3,8 @@
 -webkit-any-link, PseudoClassAnyLinkDeprecated, PseudoElementUnknown
 -webkit-autofill
 -webkit-autofill-strong-password
+-webkit-autofill-strong-password-viewable
+-webkit-direct-focus
 -webkit-drag
 -webkit-full-page-media
 active
@@ -28,6 +30,9 @@ first-line, PseudoClassUnknown, PseudoElementFirstLine
 first-of-type
 focus
 focus-within
+#if ENABLE(ATTACHMENT_ELEMENT)
+has-attachment
+#endif
 horizontal
 host, PseudoClassHost, PseudoElementUnknown
 hover
@@ -72,6 +77,11 @@ window-inactive
 -webkit-full-screen
 -webkit-full-screen-ancestor
 -webkit-full-screen-document
+-webkit-full-screen-controls-hidden
+#endif
+
+#if ENABLE(PICTURE_IN_PICTURE_API)
+picture-in-picture
 #endif
 
 #if ENABLE(VIDEO_TRACK)

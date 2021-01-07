@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2004, 2005, 2006, 2007, 2008, 2014 Apple Inc. All rights reserved.
+ *  Copyright (C) 2004-2019 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -27,7 +27,7 @@
 #include <wtf/HashTable.h>
 #include <wtf/MathExtras.h>
 #include <wtf/Vector.h>
-#include <wtf/text/AtomicStringImpl.h>
+#include <wtf/text/AtomStringImpl.h>
 
 
 #define DUMP_PROPERTYMAP_STATS 0
@@ -36,6 +36,8 @@
 #define PROPERTY_MAP_DELETED_ENTRY_KEY ((UniquedStringImpl*)1)
 
 namespace JSC {
+
+DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(PropertyTable);
 
 #if DUMP_PROPERTYMAP_STATS
 
@@ -50,7 +52,7 @@ struct PropertyMapHashTableStats {
     std::atomic<unsigned> numReinserts;
 };
 
-JS_EXPORTDATA extern PropertyMapHashTableStats* propertyMapHashTableStats;
+JS_EXPORT_PRIVATE extern PropertyMapHashTableStats* propertyMapHashTableStats;
 
 #endif
 
@@ -84,7 +86,7 @@ class PropertyTable final : public JSCell {
     public:
         ordered_iterator<T>& operator++()
         {
-            m_valuePtr = skipDeletedEntries(m_valuePtr + 1);
+            m_valuePtr = skipDeletedEntries(m_valuePtr + 1, m_endValuePtr);
             return *this;
         }
 
@@ -108,26 +110,28 @@ class PropertyTable final : public JSCell {
             return m_valuePtr;
         }
 
-        ordered_iterator(T* valuePtr)
+        ordered_iterator(T* valuePtr, T* endValuePtr)
             : m_valuePtr(valuePtr)
+            , m_endValuePtr(endValuePtr)
         {
         }
 
     private:
         T* m_valuePtr;
+        T* m_endValuePtr;
     };
 
 public:
     typedef JSCell Base;
-    static const unsigned StructureFlags = Base::StructureFlags | StructureIsImmortal;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | StructureIsImmortal;
 
-    template<typename CellType>
+    template<typename CellType, SubspaceAccess>
     static IsoSubspace* subspaceFor(VM& vm)
     {
         return &vm.propertyTableSpace;
     }
 
-    static const bool needsDestruction = true;
+    static constexpr bool needsDestruction = true;
     static void destroy(JSCell*);
 
     DECLARE_EXPORT_INFO;
@@ -165,8 +169,7 @@ public:
     find_iterator find(const KeyType&);
     ValueType* get(const KeyType&);
     // Add a value to the table
-    enum EffectOnPropertyOffset { PropertyOffsetMayChange, PropertyOffsetMustNotChange };
-    std::pair<find_iterator, bool> add(const ValueType& entry, PropertyOffset&, EffectOnPropertyOffset);
+    std::pair<find_iterator, bool> WARN_UNUSED_RETURN add(const ValueType& entry);
     // Remove a value from the table.
     void remove(const find_iterator& iter);
     void remove(const KeyType& key);
@@ -200,7 +203,7 @@ public:
     static ptrdiff_t offsetOfIndexMask() { return OBJECT_OFFSETOF(PropertyTable, m_indexMask); }
     static ptrdiff_t offsetOfIndex() { return OBJECT_OFFSETOF(PropertyTable, m_index); }
 
-    static const unsigned EmptyEntryIndex = 0;
+    static constexpr unsigned EmptyEntryIndex = 0;
 
 private:
     PropertyTable(VM&, unsigned initialCapacity);
@@ -228,11 +231,14 @@ private:
 
     // Used in iterator creation/progression.
     template<typename T>
-    static T* skipDeletedEntries(T* valuePtr);
+    static T* skipDeletedEntries(T* valuePtr, T* endValuePtr);
 
     // The table of values lies after the hash index.
     ValueType* table();
     const ValueType* table() const;
+
+    ValueType* tableEnd() { return table() + usedCount(); }
+    const ValueType* tableEnd() const { return table() + usedCount(); }
 
     // total number of  used entries in the values array - by either valid entries, or deleted ones.
     unsigned usedCount() const;
@@ -253,33 +259,37 @@ private:
     unsigned m_deletedCount;
     std::unique_ptr<Vector<PropertyOffset>> m_deletedOffsets;
 
-    static const unsigned MinimumTableSize = 16;
+    static constexpr unsigned MinimumTableSize = 16;
 };
 
 inline PropertyTable::iterator PropertyTable::begin()
 {
-    return iterator(skipDeletedEntries(table()));
+    auto* tableEnd = this->tableEnd();
+    return iterator(skipDeletedEntries(table(), tableEnd), tableEnd);
 }
 
 inline PropertyTable::iterator PropertyTable::end()
 {
-    return iterator(table() + usedCount());
+    auto* tableEnd = this->tableEnd();
+    return iterator(tableEnd, tableEnd);
 }
 
 inline PropertyTable::const_iterator PropertyTable::begin() const
 {
-    return const_iterator(skipDeletedEntries(table()));
+    auto* tableEnd = this->tableEnd();
+    return const_iterator(skipDeletedEntries(table(), tableEnd), tableEnd);
 }
 
 inline PropertyTable::const_iterator PropertyTable::end() const
 {
-    return const_iterator(table() + usedCount());
+    auto* tableEnd = this->tableEnd();
+    return const_iterator(tableEnd, tableEnd);
 }
 
 inline PropertyTable::find_iterator PropertyTable::find(const KeyType& key)
 {
     ASSERT(key);
-    ASSERT(key->isAtomic() || key->isSymbol());
+    ASSERT(key->isAtom() || key->isSymbol());
     unsigned hash = IdentifierRepHash::hash(key);
 
 #if DUMP_PROPERTYMAP_STATS
@@ -309,7 +319,8 @@ inline PropertyTable::find_iterator PropertyTable::find(const KeyType& key)
 inline PropertyTable::ValueType* PropertyTable::get(const KeyType& key)
 {
     ASSERT(key);
-    ASSERT(key->isAtomic() || key->isSymbol());
+    ASSERT(key->isAtom() || key->isSymbol());
+    ASSERT(key != PROPERTY_MAP_DELETED_ENTRY_KEY);
 
     if (!m_keyCount)
         return nullptr;
@@ -324,8 +335,10 @@ inline PropertyTable::ValueType* PropertyTable::get(const KeyType& key)
         unsigned entryIndex = m_index[hash & m_indexMask];
         if (entryIndex == EmptyEntryIndex)
             return nullptr;
-        if (key == table()[entryIndex - 1].key)
+        if (key == table()[entryIndex - 1].key) {
+            ASSERT(!m_deletedOffsets || !m_deletedOffsets->contains(table()[entryIndex - 1].offset));
             return &table()[entryIndex - 1];
+        }
 
 #if DUMP_PROPERTYMAP_STATS
         ++propertyMapHashTableStats->numLookupProbing;
@@ -335,14 +348,14 @@ inline PropertyTable::ValueType* PropertyTable::get(const KeyType& key)
     }
 }
 
-inline std::pair<PropertyTable::find_iterator, bool> PropertyTable::add(const ValueType& entry, PropertyOffset& offset, EffectOnPropertyOffset offsetEffect)
+inline std::pair<PropertyTable::find_iterator, bool> WARN_UNUSED_RETURN PropertyTable::add(const ValueType& entry)
 {
+    ASSERT(!m_deletedOffsets || !m_deletedOffsets->contains(entry.offset));
+
     // Look for a value with a matching key already in the array.
     find_iterator iter = find(entry.key);
-    if (iter.first) {
-        RELEASE_ASSERT(iter.first->offset <= offset);
+    if (iter.first)
         return std::make_pair(iter, false);
-    }
 
 #if DUMP_PROPERTYMAP_STATS
     ++propertyMapHashTableStats->numAdds;
@@ -365,11 +378,6 @@ inline std::pair<PropertyTable::find_iterator, bool> PropertyTable::add(const Va
     *iter.first = entry;
 
     ++m_keyCount;
-
-    if (offsetEffect == PropertyOffsetMayChange)
-        offset = std::max(offset, entry.offset);
-    else
-        RELEASE_ASSERT(offset >= entry.offset);
 
     return std::make_pair(iter, true);
 }
@@ -439,7 +447,8 @@ inline PropertyOffset PropertyTable::getDeletedOffset()
 inline void PropertyTable::addDeletedOffset(PropertyOffset offset)
 {
     if (!m_deletedOffsets)
-        m_deletedOffsets = std::make_unique<Vector<PropertyOffset>>();
+        m_deletedOffsets = makeUnique<Vector<PropertyOffset>>();
+    ASSERT(!m_deletedOffsets->contains(offset));
     m_deletedOffsets->append(offset);
 }
 
@@ -505,14 +514,15 @@ inline void PropertyTable::rehash(unsigned newCapacity)
     m_indexMask = m_indexSize - 1;
     m_keyCount = 0;
     m_deletedCount = 0;
-    m_index = static_cast<unsigned*>(fastZeroedMalloc(dataSize()));
+
+    m_index = static_cast<unsigned*>(PropertyTableMalloc::zeroedMalloc(dataSize()));
 
     for (; iter != end; ++iter) {
         ASSERT(canInsert());
         reinsert(*iter);
     }
 
-    fastFree(oldEntryIndices);
+    PropertyTableMalloc::free(oldEntryIndices);
 }
 
 inline unsigned PropertyTable::tableCapacity() const { return m_indexSize >> 1; }
@@ -520,9 +530,9 @@ inline unsigned PropertyTable::tableCapacity() const { return m_indexSize >> 1; 
 inline unsigned PropertyTable::deletedEntryIndex() const { return tableCapacity() + 1; }
 
 template<typename T>
-inline T* PropertyTable::skipDeletedEntries(T* valuePtr)
+inline T* PropertyTable::skipDeletedEntries(T* valuePtr, T* endValuePtr)
 {
-    while (valuePtr->key == PROPERTY_MAP_DELETED_ENTRY_KEY)
+    while (valuePtr < endValuePtr && valuePtr->key == PROPERTY_MAP_DELETED_ENTRY_KEY)
         ++valuePtr;
     return valuePtr;
 }

@@ -36,6 +36,7 @@
 #include "RenderTheme.h"
 #include "ResourceUsageThread.h"
 #include <JavaScriptCore/VM.h>
+#include <wtf/text/StringConcatenateNumbers.h>
 
 namespace WebCore {
 
@@ -44,31 +45,32 @@ static ResourceUsageData gData;
 static String cpuUsageString(float cpuUsage)
 {
     if (cpuUsage < 0)
-        return ASCIILiteral("<unknown>");
-    return String::format("%.1f%%", cpuUsage);
+        return "<unknown>"_s;
+    return makeString(FormattedNumber::fixedWidth(cpuUsage, 1), '%');
 }
 
 static String formatByteNumber(size_t number)
 {
     if (number >= 1024 * 1048576)
-        return String::format("%.3f GB", static_cast<double>(number) / (1024 * 1048576));
+        return makeString(FormattedNumber::fixedWidth(number / (1024. * 1048576), 3), " GB");
     if (number >= 1048576)
-        return String::format("%.2f MB", static_cast<double>(number) / 1048576);
+        return makeString(FormattedNumber::fixedWidth(number / 1048576., 2), " MB");
     if (number >= 1024)
-        return String::format("%.1f kB", static_cast<double>(number) / 1024);
-    return String::format("%lu", number);
+        return makeString(FormattedNumber::fixedWidth(number / 1024, 1), " kB");
+    return String::number(number);
 }
 
 static String gcTimerString(MonotonicTime timerFireDate, MonotonicTime now)
 {
     if (std::isnan(timerFireDate))
-        return ASCIILiteral("[not scheduled]");
-    return String::format("%g", (timerFireDate - now).seconds());
+        return "[not scheduled]"_s;
+    return String::numberToStringFixedPrecision((timerFireDate - now).seconds());
 }
 
 static const float gFontSize = 14;
 
 class ResourceUsageOverlayPainter final : public GraphicsLayerClient {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     ResourceUsageOverlayPainter(ResourceUsageOverlay& overlay)
         : m_overlay(overlay)
@@ -76,14 +78,14 @@ public:
         FontCascadeDescription fontDescription;
         RenderTheme::singleton().systemFont(CSSValueMessageBox, fontDescription);
         fontDescription.setComputedSize(gFontSize);
-        m_textFont = FontCascade(fontDescription, 0, 0);
+        m_textFont = FontCascade(WTFMove(fontDescription), 0, 0);
         m_textFont.update(nullptr);
     }
 
     ~ResourceUsageOverlayPainter() = default;
 
 private:
-    void paintContents(const GraphicsLayer*, GraphicsContext& context, GraphicsLayerPaintingPhase, const FloatRect& clip, GraphicsLayerPaintBehavior) override
+    void paintContents(const GraphicsLayer*, GraphicsContext& context, const FloatRect& clip, GraphicsLayerPaintBehavior) override
     {
         GraphicsContextStateSaver stateSaver(context);
         context.fillRect(clip, Color(0.0f, 0.0f, 0.0f, 0.8f));
@@ -131,15 +133,15 @@ private:
 
 void ResourceUsageOverlay::platformInitialize()
 {
-    m_overlayPainter = std::make_unique<ResourceUsageOverlayPainter>(*this);
+    m_overlayPainter = makeUnique<ResourceUsageOverlayPainter>(*this);
     m_paintLayer = GraphicsLayer::create(overlay().page()->chrome().client().graphicsLayerFactory(), *m_overlayPainter);
     m_paintLayer->setAnchorPoint(FloatPoint3D());
     m_paintLayer->setSize({ normalWidth, normalHeight });
     m_paintLayer->setBackgroundColor(Color(0.0f, 0.0f, 0.0f, 0.8f));
     m_paintLayer->setDrawsContent(true);
-    overlay().layer().addChild(m_paintLayer.get());
+    overlay().layer().addChild(*m_paintLayer);
 
-    ResourceUsageThread::addObserver(this, [this] (const ResourceUsageData& data) {
+    ResourceUsageThread::addObserver(this, All, [this] (const ResourceUsageData& data) {
         gData = data;
         m_paintLayer->setNeedsDisplay();
     });

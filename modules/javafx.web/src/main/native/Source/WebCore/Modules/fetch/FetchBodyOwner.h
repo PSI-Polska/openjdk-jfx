@@ -34,12 +34,14 @@
 #include "FetchHeaders.h"
 #include "FetchLoader.h"
 #include "FetchLoaderClient.h"
+#include "ResourceError.h"
 
 namespace WebCore {
 
 class FetchBodyOwner : public RefCounted<FetchBodyOwner>, public ActiveDOMObject {
 public:
-    FetchBodyOwner(ScriptExecutionContext&, std::optional<FetchBody>&&, Ref<FetchHeaders>&&);
+    FetchBodyOwner(ScriptExecutionContext&, Optional<FetchBody>&&, Ref<FetchHeaders>&&);
+    ~FetchBodyOwner();
 
     bool bodyUsed() const { return isDisturbed(); }
     void arrayBuffer(Ref<DeferredPromise>&&);
@@ -55,7 +57,7 @@ public:
 
     bool isActive() const { return !!m_blobLoader; }
 
-    RefPtr<ReadableStream> readableStream(JSC::ExecState&);
+    RefPtr<ReadableStream> readableStream(JSC::JSGlobalObject&);
     bool hasReadableStreamBody() const { return m_body && m_body->hasReadableStream(); }
 
 #if ENABLE(STREAMS_API)
@@ -64,6 +66,10 @@ public:
     virtual void cancel() { }
 #endif
 
+    bool hasLoadingError() const;
+    ResourceError loadingError() const;
+    Optional<Exception> loadingException() const;
+
 protected:
     const FetchBody& body() const { return *m_body; }
     FetchBody& body() { return *m_body; }
@@ -71,12 +77,12 @@ protected:
     bool isBodyNullOrOpaque() const { return !m_body || m_isBodyOpaque; }
     void cloneBody(FetchBodyOwner&);
 
-    void extractBody(ScriptExecutionContext&, FetchBody::Init&&);
+    ExceptionOr<void> extractBody(FetchBody::Init&&);
     void updateContentType();
     void consumeOnceLoadingFinished(FetchBodyConsumer::Type, Ref<DeferredPromise>&&);
 
     void setBody(FetchBody&& body) { m_body = WTFMove(body); }
-    void createReadableStream(JSC::ExecState&);
+    void createReadableStream(JSC::JSGlobalObject&);
 
     // ActiveDOMObject API
     void stop() override;
@@ -85,6 +91,9 @@ protected:
 
     void setBodyAsOpaque() { m_isBodyOpaque = true; }
     bool isBodyOpaque() const { return m_isBodyOpaque; }
+
+    void setLoadingError(Exception&&);
+    void setLoadingError(ResourceError&&);
 
 private:
     // Blob loading routines
@@ -107,7 +116,7 @@ private:
     };
 
 protected:
-    std::optional<FetchBody> m_body;
+    Optional<FetchBody> m_body;
     String m_contentType;
     bool m_isDisturbed { false };
 #if ENABLE(STREAMS_API)
@@ -116,8 +125,10 @@ protected:
     Ref<FetchHeaders> m_headers;
 
 private:
-    std::optional<BlobLoader> m_blobLoader;
+    Optional<BlobLoader> m_blobLoader;
     bool m_isBodyOpaque { false };
+
+    Variant<std::nullptr_t, Exception, ResourceError> m_loadingError;
 };
 
 } // namespace WebCore
