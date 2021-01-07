@@ -88,11 +88,12 @@ public:
     static IDBResultData iterateCursorSuccess(const IDBResourceIdentifier&, const IDBGetResult&);
 
     WEBCORE_EXPORT IDBResultData(const IDBResultData&);
+    IDBResultData(IDBResultData&&) = default;
     IDBResultData& operator=(IDBResultData&&) = default;
 
     enum IsolatedCopyTag { IsolatedCopy };
     IDBResultData(const IDBResultData&, IsolatedCopyTag);
-    IDBResultData isolatedCopy() const;
+    WEBCORE_EXPORT IDBResultData isolatedCopy() const;
 
     IDBResultType type() const { return m_type; }
     IDBResourceIdentifier requestIdentifier() const { return m_requestIdentifier; }
@@ -107,11 +108,12 @@ public:
     uint64_t resultInteger() const { return m_resultInteger; }
 
     WEBCORE_EXPORT const IDBGetResult& getResult() const;
+    WEBCORE_EXPORT IDBGetResult& getResultRef();
     WEBCORE_EXPORT const IDBGetAllResult& getAllResult() const;
 
     WEBCORE_EXPORT IDBResultData();
     template<class Encoder> void encode(Encoder&) const;
-    template<class Decoder> static std::optional<IDBResultData> decode(Decoder&);
+    template<class Decoder> static Optional<IDBResultData> decode(Decoder&);
 
 private:
     IDBResultData(const IDBResourceIdentifier&);
@@ -160,75 +162,75 @@ void IDBResultData::encode(Encoder& encoder) const
         encoder << *m_getAllResult;
 }
 
-template<class Decoder> std::optional<IDBResultData> IDBResultData::decode(Decoder& decoder)
+template<class Decoder> Optional<IDBResultData> IDBResultData::decode(Decoder& decoder)
 {
     IDBResultData result;
     if (!decoder.decode(result.m_requestIdentifier))
-        return std::nullopt;
+        return WTF::nullopt;
 
     if (!decoder.decode(result.m_error))
-        return std::nullopt;
+        return WTF::nullopt;
 
     if (!decoder.decode(result.m_databaseConnectionIdentifier))
-        return std::nullopt;
+        return WTF::nullopt;
 
     if (!decoder.decode(result.m_resultInteger))
-        return std::nullopt;
+        return WTF::nullopt;
 
     if (!decoder.decodeEnum(result.m_type))
-        return std::nullopt;
+        return WTF::nullopt;
 
     bool hasObject;
 
     if (!decoder.decode(hasObject))
-        return std::nullopt;
+        return WTF::nullopt;
     if (hasObject) {
-        auto object = std::make_unique<IDBDatabaseInfo>();
+        auto object = makeUnique<IDBDatabaseInfo>();
         if (!decoder.decode(*object))
-            return std::nullopt;
+            return WTF::nullopt;
         result.m_databaseInfo = WTFMove(object);
     }
 
     if (!decoder.decode(hasObject))
-        return std::nullopt;
+        return WTF::nullopt;
     if (hasObject) {
-        auto object = std::make_unique<IDBTransactionInfo>();
+        auto object = makeUnique<IDBTransactionInfo>();
         if (!decoder.decode(*object))
-            return std::nullopt;
+            return WTF::nullopt;
         result.m_transactionInfo = WTFMove(object);
     }
 
     if (!decoder.decode(hasObject))
-        return std::nullopt;
+        return WTF::nullopt;
     if (hasObject) {
-        auto object = std::make_unique<IDBKeyData>();
-        std::optional<IDBKeyData> optional;
+        auto object = makeUnique<IDBKeyData>();
+        Optional<IDBKeyData> optional;
         decoder >> optional;
         if (!optional)
-            return std::nullopt;
+            return WTF::nullopt;
         *object = WTFMove(*optional);
         result.m_resultKey = WTFMove(object);
     }
 
     if (!decoder.decode(hasObject))
-        return std::nullopt;
+        return WTF::nullopt;
     if (hasObject) {
-        auto object = std::make_unique<IDBGetResult>();
+        auto object = makeUnique<IDBGetResult>();
         if (!decoder.decode(*object))
-            return std::nullopt;
+            return WTF::nullopt;
         result.m_getResult = WTFMove(object);
     }
 
     if (!decoder.decode(hasObject))
-        return std::nullopt;
+        return WTF::nullopt;
     if (hasObject) {
-        auto object = std::make_unique<IDBGetAllResult>();
+        auto object = makeUnique<IDBGetAllResult>();
         if (!decoder.decode(*object))
-            return std::nullopt;
+            return WTF::nullopt;
         result.m_getAllResult = WTFMove(object);
     }
 
-    return WTFMove(result);
+    return result;
 }
 
 } // namespace WebCore

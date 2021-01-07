@@ -30,7 +30,6 @@
 #include "HitTestResult.h"
 #include "InlineElementBox.h"
 #include "InlineTextBox.h"
-#include "LayoutState.h"
 #include "RenderBlock.h"
 #include "RenderChildIterator.h"
 #include "RenderFragmentedFlow.h"
@@ -38,6 +37,7 @@
 #include "RenderGeometryMap.h"
 #include "RenderIterator.h"
 #include "RenderLayer.h"
+#include "RenderLayoutState.h"
 #include "RenderLineBreak.h"
 #include "RenderListMarker.h"
 #include "RenderTable.h"
@@ -49,10 +49,7 @@
 #include "TransformState.h"
 #include "VisiblePosition.h"
 #include <wtf/IsoMallocInlines.h>
-
-#if ENABLE(DASHBOARD_SUPPORT)
-#include "Frame.h"
-#endif
+#include <wtf/SetForScope.h>
 
 namespace WebCore {
 
@@ -72,9 +69,9 @@ RenderInline::RenderInline(Document& document, RenderStyle&& style)
 
 void RenderInline::willBeDestroyed()
 {
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // Make sure we do not retain "this" in the continuation outline table map of our containing blocks.
-    if (parent() && style().visibility() == VISIBLE && hasOutline()) {
+    if (parent() && style().visibility() == Visibility::Visible && hasOutline()) {
         bool containingBlockPaintsContinuationOutline = continuation() || isContinuation();
         if (containingBlockPaintsContinuationOutline) {
             if (RenderBlock* cb = containingBlock()) {
@@ -83,7 +80,7 @@ void RenderInline::willBeDestroyed()
             }
         }
     }
-#endif
+#endif // ASSERT_ENABLED
 
     if (!renderTreeBeingDestroyed()) {
         if (firstLineBox()) {
@@ -148,7 +145,7 @@ static void updateStyleOfAnonymousBlockContinuations(const RenderBlock& block, c
         RenderInline* continuation = block.inlineContinuation();
         if (oldStyle->hasInFlowPosition() && inFlowPositionedInlineAncestor(continuation))
             continue;
-        auto blockStyle = RenderStyle::createAnonymousStyleWithDisplay(block.style(), BLOCK);
+        auto blockStyle = RenderStyle::createAnonymousStyleWithDisplay(block.style(), DisplayType::Block);
         blockStyle.setPosition(newStyle->position());
         block.setStyle(WTFMove(blockStyle));
     }
@@ -159,7 +156,7 @@ void RenderInline::styleWillChange(StyleDifference diff, const RenderStyle& newS
     RenderBoxModelObject::styleWillChange(diff, newStyle);
     // RenderInlines forward their absolute positioned descendants to their (non-anonymous) containing block.
     // Check if this non-anonymous containing block can hold the absolute positioned elements when the inline is no longer positioned.
-    if (canContainAbsolutelyPositionedObjects() && newStyle.position() == StaticPosition) {
+    if (canContainAbsolutelyPositionedObjects() && newStyle.position() == PositionType::Static) {
         auto* container = containingBlockForAbsolutePosition();
         if (container && !container->canContainAbsolutelyPositionedObjects())
             container->removePositionedObjects(nullptr, NewContainingBlock);
@@ -209,9 +206,9 @@ void RenderInline::updateAlwaysCreateLineBoxes(bool fullLayout)
     RenderInline* parentRenderInline = is<RenderInline>(*parent()) ? downcast<RenderInline>(parent()) : nullptr;
     bool checkFonts = document().inNoQuirksMode();
     bool alwaysCreateLineBoxes = (parentRenderInline && parentRenderInline->alwaysCreateLineBoxes())
-        || (parentRenderInline && parentStyle->verticalAlign() != BASELINE)
-        || style().verticalAlign() != BASELINE
-        || style().textEmphasisMark() != TextEmphasisMarkNone
+        || (parentRenderInline && parentStyle->verticalAlign() != VerticalAlign::Baseline)
+        || style().verticalAlign() != VerticalAlign::Baseline
+        || style().textEmphasisMark() != TextEmphasisMark::None
         || (checkFonts && (!parentStyle->fontCascade().fontMetrics().hasIdenticalAscentDescentAndLineGap(style().fontCascade().fontMetrics())
         || parentStyle->lineHeight() != style().lineHeight()));
 
@@ -220,7 +217,7 @@ void RenderInline::updateAlwaysCreateLineBoxes(bool fullLayout)
         parentStyle = &parent()->firstLineStyle();
         auto& childStyle = firstLineStyle();
         alwaysCreateLineBoxes = !parentStyle->fontCascade().fontMetrics().hasIdenticalAscentDescentAndLineGap(childStyle.fontCascade().fontMetrics())
-            || childStyle.verticalAlign() != BASELINE
+            || childStyle.verticalAlign() != VerticalAlign::Baseline
             || parentStyle->lineHeight() != childStyle.lineHeight();
     }
 
@@ -415,14 +412,18 @@ private:
 
 void RenderInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
 {
-    AbsoluteQuadsGeneratorContext context(this, quads);
-    generateLineBoxRects(context);
-
-    if (RenderBoxModelObject* continuation = this->continuation())
-        continuation->absoluteQuads(quads, wasFixed);
+    absoluteQuadsIgnoringContinuation({ }, quads, wasFixed);
+    if (continuation())
+        collectAbsoluteQuadsForContinuation(quads, wasFixed);
 }
 
-#if PLATFORM(IOS)
+void RenderInline::absoluteQuadsIgnoringContinuation(const FloatRect&, Vector<FloatQuad>& quads, bool*) const
+{
+    AbsoluteQuadsGeneratorContext context(this, quads);
+    generateLineBoxRects(context);
+}
+
+#if PLATFORM(IOS_FAMILY)
 void RenderInline::absoluteQuadsForSelection(Vector<FloatQuad>& quads) const
 {
     AbsoluteQuadsGeneratorContext context(this, quads);
@@ -451,7 +452,7 @@ static LayoutUnit computeMargin(const RenderInline* renderer, const Length& marg
     if (margin.isAuto())
         return 0;
     if (margin.isFixed())
-        return margin.value();
+        return LayoutUnit(margin.value());
     if (margin.isPercentOrCalculated())
         return minimumValueForLength(margin, std::max<LayoutUnit>(0, renderer->containingBlock()->availableLogicalWidth()));
     return 0;
@@ -818,7 +819,7 @@ LayoutRect RenderInline::linesVisualOverflowBoundingBoxInFragment(const RenderFr
 LayoutRect RenderInline::clippedOverflowRectForRepaint(const RenderLayerModelObject* repaintContainer) const
 {
     // Only first-letter renderers are allowed in here during layout. They mutate the tree triggering repaints.
-    ASSERT(!view().frameView().layoutContext().isPaintOffsetCacheEnabled() || style().styleType() == FIRST_LETTER || hasSelfPaintingLayer());
+    ASSERT(!view().frameView().layoutContext().isPaintOffsetCacheEnabled() || style().styleType() == PseudoId::FirstLetter || hasSelfPaintingLayer());
 
     if (!firstLineBoxIncludingCulling() && !continuation())
         return LayoutRect();
@@ -839,14 +840,14 @@ LayoutRect RenderInline::clippedOverflowRectForRepaint(const RenderLayerModelObj
             repaintRect.move(downcast<RenderInline>(*inlineFlow).layer()->offsetForInFlowPosition());
     }
 
-    LayoutUnit outlineSize = style().outlineSize();
+    LayoutUnit outlineSize { style().outlineSize() };
     repaintRect.inflate(outlineSize);
 
     if (hitRepaintContainer || !containingBlock)
         return repaintRect;
 
-    if (containingBlock->hasOverflowClip() && containingBlock->shouldApplyClipAndScrollPositionForRepaint(repaintContainer))
-        containingBlock->applyCachedClipAndScrollPositionForRepaint(repaintRect);
+    if (containingBlock->hasOverflowClip())
+        containingBlock->applyCachedClipAndScrollPosition(repaintRect, repaintContainer, visibleRectContextForRepaint());
 
     repaintRect = containingBlock->computeRectForRepaint(repaintRect, repaintContainer);
 
@@ -871,28 +872,33 @@ LayoutRect RenderInline::rectWithOutlineForRepaint(const RenderLayerModelObject*
     return r;
 }
 
-LayoutRect RenderInline::computeRectForRepaint(const LayoutRect& rect, const RenderLayerModelObject* repaintContainer, RepaintContext context) const
+LayoutRect RenderInline::computeVisibleRectUsingPaintOffset(const LayoutRect& rect) const
+{
+    LayoutRect adjustedRect = rect;
+    auto* layoutState = view().frameView().layoutContext().layoutState();
+    if (style().hasInFlowPosition() && layer())
+        adjustedRect.move(layer()->offsetForInFlowPosition());
+    adjustedRect.move(layoutState->paintOffset());
+    if (layoutState->isClipped())
+        adjustedRect.intersect(layoutState->clipRect());
+    return adjustedRect;
+}
+
+Optional<LayoutRect> RenderInline::computeVisibleRectInContainer(const LayoutRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
 {
     // Repaint offset cache is only valid for root-relative repainting
-    LayoutRect adjustedRect = rect;
-    if (view().frameView().layoutContext().isPaintOffsetCacheEnabled() && !repaintContainer) {
-        auto* layoutState = view().frameView().layoutContext().layoutState();
-        if (style().hasInFlowPosition() && layer())
-            adjustedRect.move(layer()->offsetForInFlowPosition());
-        adjustedRect.move(layoutState->paintOffset());
-        if (layoutState->isClipped())
-            adjustedRect.intersect(layoutState->clipRect());
-        return adjustedRect;
-    }
+    if (view().frameView().layoutContext().isPaintOffsetCacheEnabled() && !container && !context.m_options.contains(VisibleRectContextOption::UseEdgeInclusiveIntersection))
+        return computeVisibleRectUsingPaintOffset(rect);
 
-    if (repaintContainer == this)
-        return adjustedRect;
+    if (container == this)
+        return rect;
 
     bool containerSkipped;
-    RenderElement* container = this->container(repaintContainer, containerSkipped);
-    if (!container)
-        return adjustedRect;
+    RenderElement* localContainer = this->container(container, containerSkipped);
+    if (!localContainer)
+        return rect;
 
+    LayoutRect adjustedRect = rect;
     LayoutPoint topLeft = adjustedRect.location();
 
     if (style().hasInFlowPosition() && layer()) {
@@ -906,19 +912,24 @@ LayoutRect RenderInline::computeRectForRepaint(const LayoutRect& rect, const Ren
     // FIXME: We ignore the lightweight clipping rect that controls use, since if |o| is in mid-layout,
     // its controlClipRect will be wrong. For overflow clip we use the values cached by the layer.
     adjustedRect.setLocation(topLeft);
-    if (container->hasOverflowClip()) {
-        downcast<RenderBox>(*container).applyCachedClipAndScrollPositionForRepaint(adjustedRect);
-        if (adjustedRect.isEmpty())
+    if (localContainer->hasOverflowClip()) {
+        // FIXME: Respect the value of context.m_options.
+        SetForScope<OptionSet<VisibleRectContextOption>> change(context.m_options, context.m_options | VisibleRectContextOption::ApplyCompositedContainerScrolls);
+        bool isEmpty = !downcast<RenderBox>(*localContainer).applyCachedClipAndScrollPosition(adjustedRect, container, context);
+        if (isEmpty) {
+            if (context.m_options.contains(VisibleRectContextOption::UseEdgeInclusiveIntersection))
+                return WTF::nullopt;
             return adjustedRect;
+        }
     }
 
     if (containerSkipped) {
         // If the repaintContainer is below o, then we need to map the rect into repaintContainer's coordinates.
-        LayoutSize containerOffset = repaintContainer->offsetFromAncestorContainer(*container);
+        LayoutSize containerOffset = container->offsetFromAncestorContainer(*localContainer);
         adjustedRect.move(-containerOffset);
         return adjustedRect;
     }
-    return container->computeRectForRepaint(adjustedRect, repaintContainer, context);
+    return localContainer->computeVisibleRectInContainer(adjustedRect, container, context);
 }
 
 LayoutSize RenderInline::offsetFromContainer(RenderElement& container, const LayoutPoint&, bool* offsetDependsOnPoint) const
@@ -1093,7 +1104,7 @@ void RenderInline::deleteLines()
 
 std::unique_ptr<InlineFlowBox> RenderInline::createInlineFlowBox()
 {
-    return std::make_unique<InlineFlowBox>(*this);
+    return makeUnique<InlineFlowBox>(*this);
 }
 
 InlineFlowBox* RenderInline::createAndAppendInlineFlowBox()
@@ -1204,33 +1215,33 @@ void RenderInline::paintOutline(PaintInfo& paintInfo, const LayoutPoint& paintOf
 
     auto& styleToUse = style();
     // Only paint the focus ring by hand if the theme isn't able to draw it.
-    if (styleToUse.outlineStyleIsAuto() && !theme().supportsFocusRing(styleToUse)) {
+    if (styleToUse.outlineStyleIsAuto() == OutlineIsAuto::On && !theme().supportsFocusRing(styleToUse)) {
         Vector<LayoutRect> focusRingRects;
         addFocusRingRects(focusRingRects, paintOffset, paintInfo.paintContainer);
         paintFocusRing(paintInfo, styleToUse, focusRingRects);
     }
 
-    if (hasOutlineAnnotation() && !styleToUse.outlineStyleIsAuto() && !theme().supportsFocusRing(styleToUse))
+    if (hasOutlineAnnotation() && styleToUse.outlineStyleIsAuto() == OutlineIsAuto::Off && !theme().supportsFocusRing(styleToUse))
         addPDFURLRect(paintInfo, paintOffset);
 
     GraphicsContext& graphicsContext = paintInfo.context();
     if (graphicsContext.paintingDisabled())
         return;
 
-    if (styleToUse.outlineStyleIsAuto() || !styleToUse.hasOutline())
+    if (styleToUse.outlineStyleIsAuto() == OutlineIsAuto::On || !styleToUse.hasOutline())
         return;
 
     Vector<LayoutRect> rects;
     rects.append(LayoutRect());
     for (InlineFlowBox* curr = firstLineBox(); curr; curr = curr->nextLineBox()) {
         const RootInlineBox& rootBox = curr->root();
-        LayoutUnit top = std::max<LayoutUnit>(rootBox.lineTop(), curr->logicalTop());
-        LayoutUnit bottom = std::min<LayoutUnit>(rootBox.lineBottom(), curr->logicalBottom());
-        rects.append(LayoutRect(curr->x(), top, curr->logicalWidth(), bottom - top));
+        LayoutUnit top = std::max(rootBox.lineTop(), LayoutUnit(curr->logicalTop()));
+        LayoutUnit bottom = std::min(rootBox.lineBottom(), LayoutUnit(curr->logicalBottom()));
+        rects.append({ LayoutUnit(curr->x()), top, LayoutUnit(curr->logicalWidth()), bottom - top });
     }
     rects.append(LayoutRect());
 
-    Color outlineColor = styleToUse.visitedDependentColor(CSSPropertyOutlineColor);
+    Color outlineColor = styleToUse.visitedDependentColorWithColorFilter(CSSPropertyOutlineColor);
     bool useTransparencyLayer = !outlineColor.isOpaque();
     if (useTransparencyLayer) {
         graphicsContext.beginTransparencyLayer(outlineColor.alphaAsFloat());
@@ -1256,7 +1267,7 @@ void RenderInline::paintOutlineForLine(GraphicsContext& graphicsContext, const L
         return;
 
     float outlineWidth = styleToUse.outlineWidth();
-    EBorderStyle outlineStyle = styleToUse.outlineStyle();
+    BorderStyle outlineStyle = styleToUse.outlineStyle();
     bool antialias = shouldAntialiasLines(graphicsContext);
 
     auto adjustedPreviousLine = previousLine;
@@ -1382,48 +1393,5 @@ void RenderInline::paintOutlineForLine(GraphicsContext& graphicsContext, const L
         drawLineForBoxSide(graphicsContext, FloatRect(topLeft, bottomRight), BSBottom, outlineColor, outlineStyle, adjacentWidth1, adjacentWidth2, antialias);
     }
 }
-
-#if ENABLE(DASHBOARD_SUPPORT)
-void RenderInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
-{
-    // Convert the style regions to absolute coordinates.
-    if (style().visibility() != VISIBLE)
-        return;
-
-    const Vector<StyleDashboardRegion>& styleRegions = style().dashboardRegions();
-    unsigned i, count = styleRegions.size();
-    for (i = 0; i < count; i++) {
-        StyleDashboardRegion styleRegion = styleRegions[i];
-
-        LayoutRect linesBoundingBox = this->linesBoundingBox();
-        LayoutUnit w = linesBoundingBox.width();
-        LayoutUnit h = linesBoundingBox.height();
-
-        AnnotatedRegionValue region;
-        region.label = styleRegion.label;
-        region.bounds = LayoutRect(linesBoundingBox.x() + styleRegion.offset.left().value(),
-                                linesBoundingBox.y() + styleRegion.offset.top().value(),
-                                w - styleRegion.offset.left().value() - styleRegion.offset.right().value(),
-                                h - styleRegion.offset.top().value() - styleRegion.offset.bottom().value());
-        region.type = styleRegion.type;
-
-        RenderObject* container = containingBlock();
-        if (!container)
-            container = this;
-
-        region.clip = container->computeAbsoluteRepaintRect(region.bounds);
-        if (region.clip.height() < 0) {
-            region.clip.setHeight(0);
-            region.clip.setWidth(0);
-        }
-
-        FloatPoint absPos = container->localToAbsolute();
-        region.bounds.setX(absPos.x() + region.bounds.x());
-        region.bounds.setY(absPos.y() + region.bounds.y());
-
-        regions.append(region);
-    }
-}
-#endif
 
 } // namespace WebCore

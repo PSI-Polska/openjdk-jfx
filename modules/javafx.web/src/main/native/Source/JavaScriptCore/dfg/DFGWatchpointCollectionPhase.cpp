@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -45,7 +45,7 @@
 namespace JSC { namespace DFG {
 
 class WatchpointCollectionPhase : public Phase {
-    static const bool verbose = false;
+    static constexpr bool verbose = false;
 
 public:
     WatchpointCollectionPhase(Graph& graph)
@@ -81,7 +81,7 @@ private:
             if (m_node->isBinaryUseKind(ObjectUse)
                 || (m_node->child1().useKind() == ObjectUse && m_node->child2().useKind() == ObjectOrOtherUse)
                 || (m_node->child1().useKind() == ObjectOrOtherUse && m_node->child2().useKind() == ObjectUse)
-                || (m_node->child1().useKind() == OtherUse || m_node->child2().useKind() == OtherUse))
+                || (m_node->child1().useKind() == KnownOtherUse || m_node->child2().useKind() == KnownOtherUse))
                 handleMasqueradesAsUndefined();
             break;
 

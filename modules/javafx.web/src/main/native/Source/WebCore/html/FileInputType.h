@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 Google Inc. All rights reserved.
- * Copyright (C) 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -51,7 +51,7 @@ public:
     static Vector<FileChooserFileInfo> filesFromFormControlState(const FormControlState&);
 
 private:
-    const AtomicString& formControlType() const final;
+    const AtomString& formControlType() const final;
     FormControlState saveFormControlState() const final;
     void restoreFormControlState(const FormControlState&) final;
     bool appendFormData(DOMFormData&, bool) const final;
@@ -76,8 +76,8 @@ private:
     Icon* icon() const final;
     bool isFileUpload() const final;
     void createShadowSubtree() final;
-    void disabledAttributeChanged() final;
-    void multipleAttributeChanged() final;
+    void disabledStateChanged() final;
+    void attributeChanged(const QualifiedName&) final;
     String defaultToolTip() const final;
 
     void filesChosen(const Vector<FileChooserFileInfo>&, const String& displayString = { }, Icon* = nullptr) final;

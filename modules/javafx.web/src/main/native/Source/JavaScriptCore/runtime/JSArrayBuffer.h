@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2018 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,16 +26,20 @@
 #pragma once
 
 #include "ArrayBuffer.h"
-#include "JSCPoison.h"
 #include "JSObject.h"
-#include <wtf/Poisoned.h>
 
 namespace JSC {
 
 class JSArrayBuffer final : public JSNonFinalObject {
 public:
     using Base = JSNonFinalObject;
-    static const unsigned StructureFlags = Base::StructureFlags;
+    static constexpr unsigned StructureFlags = Base::StructureFlags;
+
+    template<typename CellType, SubspaceAccess mode>
+    static IsoSubspace* subspaceFor(VM& vm)
+    {
+        return vm.arrayBufferSpace<mode>();
+    }
 
 protected:
     JSArrayBuffer(VM&, Structure*, RefPtr<ArrayBuffer>&&);
@@ -45,7 +49,7 @@ public:
     // This function will register the new wrapper with the vm's TypedArrayController.
     JS_EXPORT_PRIVATE static JSArrayBuffer* create(VM&, Structure*, RefPtr<ArrayBuffer>&&);
 
-    ArrayBuffer* impl() const { return m_impl.unpoisoned(); }
+    ArrayBuffer* impl() const { return m_impl; }
 
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue prototype);
 
@@ -58,10 +62,10 @@ public:
     static ArrayBuffer* toWrapped(VM&, JSValue);
 
 protected:
-    static size_t estimatedSize(JSCell*);
+    static size_t estimatedSize(JSCell*, VM&);
 
 private:
-    Poisoned<JSArrayBufferPoison, ArrayBuffer*> m_impl;
+    ArrayBuffer* m_impl;
 };
 
 inline ArrayBuffer* toPossiblySharedArrayBuffer(VM& vm, JSValue value)

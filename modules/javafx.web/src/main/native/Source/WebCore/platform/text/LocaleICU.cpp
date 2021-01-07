@@ -41,11 +41,10 @@
 
 namespace WebCore {
 using namespace icu;
-using namespace std;
 
-std::unique_ptr<Locale> Locale::create(const AtomicString& locale)
+std::unique_ptr<Locale> Locale::create(const AtomString& locale)
 {
-    return std::make_unique<LocaleICU>(locale.string().utf8().data());
+    return makeUnique<LocaleICU>(locale.string().utf8().data());
 }
 
 LocaleICU::LocaleICU(const char* locale)
@@ -73,7 +72,7 @@ String LocaleICU::decimalSymbol(UNumberFormatSymbol symbol)
     ASSERT(U_SUCCESS(status) || status == U_BUFFER_OVERFLOW_ERROR);
     if (U_FAILURE(status) && status != U_BUFFER_OVERFLOW_ERROR)
         return String();
-    StringVector<UChar> buffer(bufferLength);
+    Vector<UChar> buffer(bufferLength);
     status = U_ZERO_ERROR;
     unum_getSymbol(m_numberFormat, symbol, buffer.data(), bufferLength, &status);
     if (U_FAILURE(status))
@@ -88,7 +87,7 @@ String LocaleICU::decimalTextAttribute(UNumberFormatTextAttribute tag)
     ASSERT(U_SUCCESS(status) || status == U_BUFFER_OVERFLOW_ERROR);
     if (U_FAILURE(status) && status != U_BUFFER_OVERFLOW_ERROR)
         return String();
-    StringVector<UChar> buffer(bufferLength);
+    Vector<UChar> buffer(bufferLength);
     status = U_ZERO_ERROR;
     unum_getTextAttribute(m_numberFormat, tag, buffer.data(), bufferLength, &status);
     ASSERT(U_SUCCESS(status));
@@ -153,7 +152,7 @@ static String getDateFormatPattern(const UDateFormat* dateFormat)
     int32_t length = udat_toPattern(dateFormat, TRUE, 0, 0, &status);
     if (status != U_BUFFER_OVERFLOW_ERROR || !length)
         return emptyString();
-    StringVector<UChar> buffer(length);
+    Vector<UChar> buffer(length);
     status = U_ZERO_ERROR;
     udat_toPattern(dateFormat, TRUE, buffer.data(), length, &status);
     if (U_FAILURE(status))
@@ -164,22 +163,22 @@ static String getDateFormatPattern(const UDateFormat* dateFormat)
 std::unique_ptr<Vector<String>> LocaleICU::createLabelVector(const UDateFormat* dateFormat, UDateFormatSymbolType type, int32_t startIndex, int32_t size)
 {
     if (!dateFormat)
-        return std::make_unique<Vector<String>>();
+        return makeUnique<Vector<String>>();
     if (udat_countSymbols(dateFormat, type) != startIndex + size)
-        return std::make_unique<Vector<String>>();
+        return makeUnique<Vector<String>>();
 
-    auto labels = std::make_unique<Vector<String>>();
+    auto labels = makeUnique<Vector<String>>();
     labels->reserveCapacity(size);
     for (int32_t i = 0; i < size; ++i) {
         UErrorCode status = U_ZERO_ERROR;
         int32_t length = udat_getSymbols(dateFormat, type, startIndex + i, 0, 0, &status);
         if (status != U_BUFFER_OVERFLOW_ERROR)
-            return std::make_unique<Vector<String>>();
-        StringVector<UChar> buffer(length);
+            return makeUnique<Vector<String>>();
+        Vector<UChar> buffer(length);
         status = U_ZERO_ERROR;
         udat_getSymbols(dateFormat, type, startIndex + i, buffer.data(), length, &status);
         if (U_FAILURE(status))
-            return std::make_unique<Vector<String>>();
+            return makeUnique<Vector<String>>();
         labels->append(String::adopt(WTFMove(buffer)));
     }
     return WTFMove(labels);
@@ -187,7 +186,7 @@ std::unique_ptr<Vector<String>> LocaleICU::createLabelVector(const UDateFormat* 
 
 static std::unique_ptr<Vector<String>> createFallbackMonthLabels()
 {
-    auto labels = std::make_unique<Vector<String>>();
+    auto labels = makeUnique<Vector<String>>();
     labels->reserveCapacity(WTF_ARRAY_LENGTH(WTF::monthFullName));
     for (unsigned i = 0; i < WTF_ARRAY_LENGTH(WTF::monthFullName); ++i)
         labels->append(WTF::monthFullName[i]);
@@ -209,7 +208,7 @@ const Vector<String>& LocaleICU::monthLabels()
 
 static std::unique_ptr<Vector<String>> createFallbackAMPMLabels()
 {
-    auto labels = std::make_unique<Vector<String>>();
+    auto labels = makeUnique<Vector<String>>();
     labels->reserveCapacity(2);
     labels->append("AM");
     labels->append("PM");
@@ -251,14 +250,14 @@ String LocaleICU::dateFormat()
     if (!m_dateFormat.isNull())
         return m_dateFormat;
     if (!initializeShortDateFormat())
-        return ASCIILiteral("yyyy-MM-dd");
+        return "yyyy-MM-dd"_s;
     m_dateFormat = getDateFormatPattern(m_shortDateFormat);
     return m_dateFormat;
 }
 
 static String getFormatForSkeleton(const char* locale, const UChar* skeleton, int32_t skeletonLength)
 {
-    String format = ASCIILiteral("yyyy-MM");
+    String format = "yyyy-MM"_s;
     UErrorCode status = U_ZERO_ERROR;
     UDateTimePatternGenerator* patternGenerator = udatpg_open(locale, &status);
     if (!patternGenerator)
@@ -266,7 +265,7 @@ static String getFormatForSkeleton(const char* locale, const UChar* skeleton, in
     status = U_ZERO_ERROR;
     int32_t length = udatpg_getBestPattern(patternGenerator, skeleton, skeletonLength, 0, 0, &status);
     if (status == U_BUFFER_OVERFLOW_ERROR && length) {
-        StringVector<UChar> buffer(length);
+        Vector<UChar> buffer(length);
         status = U_ZERO_ERROR;
         udatpg_getBestPattern(patternGenerator, skeleton, skeletonLength, buffer.data(), length, &status);
         if (U_SUCCESS(status))

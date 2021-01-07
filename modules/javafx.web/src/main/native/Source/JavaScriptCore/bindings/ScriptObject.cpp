@@ -34,19 +34,13 @@
 
 #include "JSCInlines.h"
 
-using namespace JSC;
-
 namespace Deprecated {
 
-ScriptObject::ScriptObject(ExecState* scriptState, JSObject* object)
-    : ScriptValue(scriptState->vm(), object)
-    , m_scriptState(scriptState)
-{
-}
+using namespace JSC;
 
-ScriptObject::ScriptObject(ExecState* scriptState, const ScriptValue& scriptValue)
-    : ScriptValue(scriptState->vm(), scriptValue.jsValue())
-    , m_scriptState(scriptState)
+ScriptObject::ScriptObject(JSGlobalObject* globalObject, JSObject* object)
+    : ScriptValue(globalObject->vm(), object)
+    , m_globalObject(globalObject)
 {
 }
 

@@ -32,16 +32,12 @@
 #include "CaptionUserPreferencesMediaAF.h"
 
 #include "AudioTrackList.h"
-#if PLATFORM(WIN)
-#include <pal/spi/win/CoreTextSPIWin.h>
-#endif
 #include "FloatConversion.h"
 #include "HTMLMediaElement.h"
 #include "LocalizedStrings.h"
 #include "Logging.h"
 #include "MediaControlElements.h"
 #include "TextTrackList.h"
-#include "URL.h"
 #include "UserStyleSheetTypes.h"
 #include "VTTCue.h"
 #include <algorithm>
@@ -49,11 +45,17 @@
 #include <wtf/NeverDestroyed.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/SoftLinking.h>
+#include <wtf/URL.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
+#include <wtf/text/StringConcatenateNumbers.h>
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 #import "WebCoreThreadRun.h"
+#endif
+
+#if PLATFORM(WIN)
+#include <pal/spi/win/CoreTextSPIWin.h>
 #endif
 
 #if COMPILER(MSVC)
@@ -62,6 +64,7 @@
 #endif
 
 #if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+
 #include <CoreText/CoreText.h>
 #include <MediaAccessibility/MediaAccessibility.h>
 
@@ -83,21 +86,22 @@
 SOFT_LINK_AVF_FRAMEWORK(CoreMedia)
 SOFT_LINK_AVF_FRAMEWORK_IMPORT_OPTIONAL(CoreMedia, MTEnableCaption2015Behavior, Boolean, ())
 
-#else
+#else // PLATFORM(WIN)
 
-SOFT_LINK_FRAMEWORK(MediaToolbox)
+SOFT_LINK_FRAMEWORK_OPTIONAL(MediaToolbox)
 SOFT_LINK_OPTIONAL(MediaToolbox, MTEnableCaption2015Behavior, Boolean, (), ())
 
-#endif // PLATFORM(WIN)
+#endif // !PLATFORM(WIN)
 
 #endif // HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
 
 namespace WebCore {
 
 #if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+
 static void userCaptionPreferencesChangedNotificationCallback(CFNotificationCenterRef, void* observer, CFStringRef, const void *, CFDictionaryRef)
 {
-#if !PLATFORM(IOS)
+#if !PLATFORM(IOS_FAMILY)
     static_cast<CaptionUserPreferencesMediaAF*>(observer)->captionPreferencesChanged();
 #else
     WebThreadRun(^{
@@ -105,6 +109,7 @@ static void userCaptionPreferencesChangedNotificationCallback(CFNotificationCent
     });
 #endif
 }
+
 #endif
 
 CaptionUserPreferencesMediaAF::CaptionUserPreferencesMediaAF(PageGroup& group)
@@ -117,6 +122,11 @@ CaptionUserPreferencesMediaAF::CaptionUserPreferencesMediaAF(PageGroup& group)
     static bool initialized;
     if (!initialized) {
         initialized = true;
+
+#if !PLATFORM(WIN)
+        if (!MediaToolboxLibrary())
+            return;
+#endif
 
         MTEnableCaption2015BehaviorPtrType function = MTEnableCaption2015BehaviorPtr();
         if (!function || !function())
@@ -341,7 +351,7 @@ String CaptionUserPreferencesMediaAF::windowRoundedCornerRadiusCSS() const
         return emptyString();
 
     StringBuilder builder;
-    appendCSS(builder, CSSPropertyBorderRadius, String::format("%.02fpx", radius), behavior == kMACaptionAppearanceBehaviorUseValue);
+    appendCSS(builder, CSSPropertyBorderRadius, makeString(radius, "px"), behavior == kMACaptionAppearanceBehaviorUseValue);
     return builder.toString();
 }
 
@@ -557,7 +567,7 @@ String CaptionUserPreferencesMediaAF::captionsStyleSheetOverride() const
     String fontName = captionsDefaultFontCSS();
     String background = captionsBackgroundCSS();
     if (!background.isEmpty() || !captionsColor.isEmpty() || !edgeStyle.isEmpty() || !fontName.isEmpty()) {
-        captionsOverrideStyleSheet.appendLiteral(" video::");
+        captionsOverrideStyleSheet.appendLiteral(" ::");
         captionsOverrideStyleSheet.append(TextTrackCue::cueShadowPseudoId());
         captionsOverrideStyleSheet.append('{');
 
@@ -576,8 +586,8 @@ String CaptionUserPreferencesMediaAF::captionsStyleSheetOverride() const
     String windowColor = captionsWindowCSS();
     String windowCornerRadius = windowRoundedCornerRadiusCSS();
     if (!windowColor.isEmpty() || !windowCornerRadius.isEmpty()) {
-        captionsOverrideStyleSheet.appendLiteral(" video::");
-        captionsOverrideStyleSheet.append(VTTCue::cueBackdropShadowPseudoId());
+        captionsOverrideStyleSheet.appendLiteral(" ::");
+        captionsOverrideStyleSheet.append(TextTrackCue::cueBackdropShadowPseudoId());
         captionsOverrideStyleSheet.append('{');
 
         if (!windowColor.isEmpty())
@@ -831,7 +841,12 @@ static bool textTrackCompare(const RefPtr<TextTrack>& a, const RefPtr<TextTrack>
     }
 
     // ... and tracks of the same type and language sort by the menu item text.
-    return codePointCompare(trackDisplayName(a.get()), trackDisplayName(b.get())) < 0;
+    auto trackDisplayComparison = codePointCompare(trackDisplayName(a.get()), trackDisplayName(b.get()));
+    if (trackDisplayComparison)
+        return trackDisplayComparison < 0;
+
+    // ... and if the menu item text is the same, compare the unique IDs
+    return a->uniqueId() < b->uniqueId();
 }
 
 Vector<RefPtr<AudioTrack>> CaptionUserPreferencesMediaAF::sortedTrackListForMenu(AudioTrackList* trackList)
@@ -847,7 +862,11 @@ Vector<RefPtr<AudioTrack>> CaptionUserPreferencesMediaAF::sortedTrackListForMenu
     }
 
     std::sort(tracksForMenu.begin(), tracksForMenu.end(), [](auto& a, auto& b) {
-        return codePointCompare(trackDisplayName(a.get()), trackDisplayName(b.get())) < 0;
+        auto trackDisplayComparison = codePointCompare(trackDisplayName(a.get()), trackDisplayName(b.get()));
+        if (trackDisplayComparison)
+            return trackDisplayComparison < 0;
+
+        return a->uniqueId() < b->uniqueId();
     });
 
     return tracksForMenu;

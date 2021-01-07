@@ -25,7 +25,7 @@
  */
 
 #include "config.h"
-#include "RunLoop.h"
+#include <wtf/RunLoop.h>
 
 namespace WTF {
 
@@ -218,6 +218,12 @@ void RunLoop::wakeUp()
     wakeUp(locker);
 }
 
+RunLoop::CycleResult RunLoop::cycle(RunLoopMode)
+{
+    iterate();
+    return CycleResult::Continue;
+}
+
 void RunLoop::schedule(const AbstractLocker&, Ref<TimerBase::ScheduledTask>&& task)
 {
     m_schedules.append(task.ptr());
@@ -258,13 +264,13 @@ RunLoop::TimerBase::~TimerBase()
     stop(locker);
 }
 
-void RunLoop::TimerBase::start(double interval, bool repeating)
+void RunLoop::TimerBase::start(Seconds interval, bool repeating)
 {
     LockHolder locker(m_runLoop->m_loopLock);
     stop(locker);
     m_scheduledTask = ScheduledTask::create([this] {
         fired();
-    }, Seconds(interval), repeating);
+    }, interval, repeating);
     m_runLoop->scheduleAndWakeUp(locker, *m_scheduledTask);
 }
 

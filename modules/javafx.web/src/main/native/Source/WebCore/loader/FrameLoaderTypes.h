@@ -28,6 +28,10 @@
 
 #pragma once
 
+#include "ElementContext.h"
+#include "IntRect.h"
+#include "ProcessIdentifier.h"
+
 namespace WebCore {
 
 enum FrameState {
@@ -38,19 +42,20 @@ enum FrameState {
     FrameStateComplete
 };
 
-enum class PolicyAction {
+enum class PolicyAction : uint8_t {
     Use,
     Download,
-    Ignore
+    Ignore,
+    StopAllLoads
 };
 
-enum class ReloadOption {
+enum class ReloadOption : uint8_t {
     ExpiredOnly = 1 << 0,
     FromOrigin  = 1 << 1,
     DisableContentBlockers = 1 << 2,
 };
 
-enum class FrameLoadType {
+enum class FrameLoadType : uint8_t {
     Standard,
     Back,
     Forward,
@@ -63,12 +68,56 @@ enum class FrameLoadType {
     ReloadExpiredOnly
 };
 
-enum class NewFrameOpenerPolicy {
+enum class WillContinueLoading : bool { No, Yes };
+
+class PolicyCheckIdentifier {
+public:
+    PolicyCheckIdentifier() = default;
+
+    static PolicyCheckIdentifier create();
+
+    bool isValidFor(PolicyCheckIdentifier);
+    bool operator==(const PolicyCheckIdentifier& other) const { return m_process == other.m_process && m_policyCheck == other.m_policyCheck; }
+
+    template<class Encoder> void encode(Encoder&) const;
+    template<class Decoder> static Optional<PolicyCheckIdentifier> decode(Decoder&);
+
+private:
+    PolicyCheckIdentifier(ProcessIdentifier process, uint64_t policyCheck)
+        : m_process(process)
+        , m_policyCheck(policyCheck)
+    { }
+
+    ProcessIdentifier m_process;
+    uint64_t m_policyCheck { 0 };
+};
+
+template<class Encoder>
+void PolicyCheckIdentifier::encode(Encoder& encoder) const
+{
+    encoder << m_process << m_policyCheck;
+}
+
+template<class Decoder>
+Optional<PolicyCheckIdentifier> PolicyCheckIdentifier::decode(Decoder& decoder)
+{
+    auto process = ProcessIdentifier::decode(decoder);
+    if (!process)
+        return WTF::nullopt;
+
+    uint64_t policyCheck;
+    if (!decoder.decode(policyCheck))
+        return WTF::nullopt;
+
+    return PolicyCheckIdentifier { *process, policyCheck };
+}
+
+enum class NewFrameOpenerPolicy : uint8_t {
     Suppress,
     Allow
 };
 
-enum class NavigationType {
+enum class NavigationType : uint8_t {
     LinkClicked,
     FormSubmitted,
     BackForward,
@@ -77,13 +126,13 @@ enum class NavigationType {
     Other
 };
 
-enum class ShouldOpenExternalURLsPolicy {
+enum class ShouldOpenExternalURLsPolicy : uint8_t {
     ShouldNotAllow,
     ShouldAllowExternalSchemes,
     ShouldAllow,
 };
 
-enum class InitiatedByMainFrame {
+enum class InitiatedByMainFrame : uint8_t {
     Yes,
     Unknown,
 };
@@ -93,7 +142,12 @@ enum ClearProvisionalItemPolicy {
     ShouldNotClearProvisionalItem
 };
 
-enum class ObjectContentType {
+enum class StopLoadingPolicy {
+    PreventDuringUnloadEvents,
+    AlwaysStopLoading
+};
+
+enum class ObjectContentType : uint8_t {
     None,
     Image,
     Frame,
@@ -126,39 +180,89 @@ enum WebGLLoadPolicy {
     WebGLPendingCreation
 };
 
-enum class LockHistory {
-    Yes,
-    No
+enum class LockHistory : bool { No, Yes };
+enum class LockBackForwardList : bool { No, Yes };
+enum class AllowNavigationToInvalidURL : bool { No, Yes };
+enum class HasInsecureContent : bool { No, Yes };
+
+struct SystemPreviewInfo {
+    ElementContext element;
+
+    IntRect previewRect;
+    bool isPreview { false };
+
+    template<class Encoder> void encode(Encoder&) const;
+    template<class Decoder> static Optional<SystemPreviewInfo> decode(Decoder&);
 };
 
-enum class LockBackForwardList {
-    Yes,
-    No
-};
+template<class Encoder>
+void SystemPreviewInfo::encode(Encoder& encoder) const
+{
+    encoder << element << previewRect << isPreview;
+}
 
-enum class AllowNavigationToInvalidURL {
-    Yes,
-    No
-};
+template<class Decoder>
+Optional<SystemPreviewInfo> SystemPreviewInfo::decode(Decoder& decoder)
+{
+    Optional<ElementContext> element;
+    decoder >> element;
+    if (!element)
+        return WTF::nullopt;
 
-enum class HasInsecureContent {
-    Yes,
-    No,
+    Optional<IntRect> previewRect;
+    decoder >> previewRect;
+    if (!previewRect)
+        return WTF::nullopt;
+
+    Optional<bool> isPreview;
+    decoder >> isPreview;
+    if (!isPreview)
+        return WTF::nullopt;
+
+    return { { WTFMove(*element), WTFMove(*previewRect), WTFMove(*isPreview) } };
+}
+
+enum class LoadCompletionType : uint8_t {
+    Finish,
+    Cancel
 };
 
 } // namespace WebCore
 
 namespace WTF {
 
-template<typename> struct EnumTraits;
-template<typename E, E...> struct EnumValues;
-
 template<> struct EnumTraits<WebCore::PolicyAction> {
     using values = EnumValues<
         WebCore::PolicyAction,
         WebCore::PolicyAction::Use,
         WebCore::PolicyAction::Download,
-        WebCore::PolicyAction::Ignore
+        WebCore::PolicyAction::Ignore,
+        WebCore::PolicyAction::StopAllLoads
+    >;
+};
+
+template<> struct EnumTraits<WebCore::FrameLoadType> {
+    using values = EnumValues<
+        WebCore::FrameLoadType,
+        WebCore::FrameLoadType::Standard,
+        WebCore::FrameLoadType::Back,
+        WebCore::FrameLoadType::Forward,
+        WebCore::FrameLoadType::IndexedBackForward,
+        WebCore::FrameLoadType::Reload,
+        WebCore::FrameLoadType::Same,
+        WebCore::FrameLoadType::RedirectWithLockedBackForwardList,
+        WebCore::FrameLoadType::Replace,
+        WebCore::FrameLoadType::ReloadFromOrigin,
+        WebCore::FrameLoadType::ReloadExpiredOnly
+    >;
+};
+
+template<> struct EnumTraits<WebCore::ShouldOpenExternalURLsPolicy> {
+    using values = EnumValues<
+        WebCore::ShouldOpenExternalURLsPolicy,
+        WebCore::ShouldOpenExternalURLsPolicy::ShouldNotAllow,
+        WebCore::ShouldOpenExternalURLsPolicy::ShouldAllowExternalSchemes,
+        WebCore::ShouldOpenExternalURLsPolicy::ShouldAllow
     >;
 };
 

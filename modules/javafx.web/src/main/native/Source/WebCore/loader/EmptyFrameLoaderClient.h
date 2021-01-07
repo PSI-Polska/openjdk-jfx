@@ -23,7 +23,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#pragma once
+
 #include "FrameLoaderClient.h"
+#include "ResourceError.h"
+
+#if USE(QUICK_LOOK)
+#include "LegacyPreviewLoaderClient.h"
+#endif
 
 namespace WebCore {
 
@@ -32,15 +39,14 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
     void frameLoaderDestroyed() override { }
 
-    std::optional<uint64_t> frameID() const override { return std::nullopt; }
-    std::optional<uint64_t> pageID() const override { return std::nullopt; }
-    PAL::SessionID sessionID() const override;
+    Optional<FrameIdentifier> frameID() const override { return WTF::nullopt; }
+    Optional<PageIdentifier> pageID() const override { return WTF::nullopt; }
 
     bool hasWebView() const final { return true; } // mainly for assertions
 
     void makeRepresentation(DocumentLoader*) final { }
-#if PLATFORM(IOS)
-    bool forceLayoutOnRestoreFromPageCache() final { return false; }
+#if PLATFORM(IOS_FAMILY)
+    bool forceLayoutOnRestoreFromBackForwardCache() final { return false; }
 #endif
     void forceLayoutForNonHTML() final { }
 
@@ -49,7 +55,7 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
     void detachedFromParent2() final { }
     void detachedFromParent3() final { }
 
-    void convertMainResourceLoadToDownload(DocumentLoader*, PAL::SessionID, const ResourceRequest&, const ResourceResponse&) final { }
+    void convertMainResourceLoadToDownload(DocumentLoader*, const ResourceRequest&, const ResourceResponse&) final { }
 
     void assignIdentifierToInitialRequest(unsigned long, DocumentLoader*, const ResourceRequest&) final { }
     bool shouldUseCredentialStorage(DocumentLoader*, unsigned long) override { return false; }
@@ -59,7 +65,7 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
     bool canAuthenticateAgainstProtectionSpace(DocumentLoader*, unsigned long, const ProtectionSpace&) final { return false; }
 #endif
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     RetainPtr<CFDictionaryRef> connectionProperties(DocumentLoader*, unsigned long) final { return nullptr; }
 #endif
 
@@ -75,7 +81,7 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
     void dispatchDidDispatchOnloadEvents() final { }
     void dispatchDidReceiveServerRedirectForProvisionalLoad() final { }
     void dispatchDidCancelClientRedirect() final { }
-    void dispatchWillPerformClientRedirect(const URL&, double, WallTime) final { }
+    void dispatchWillPerformClientRedirect(const URL&, double, WallTime, LockBackForwardList) final { }
     void dispatchDidChangeLocationWithinPage() final { }
     void dispatchDidPushStateWithinPage() final { }
     void dispatchDidReplaceStateWithinPage() final { }
@@ -83,25 +89,25 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
     void dispatchWillClose() final { }
     void dispatchDidStartProvisionalLoad() final { }
     void dispatchDidReceiveTitle(const StringWithDirection&) final { }
-    void dispatchDidCommitLoad(std::optional<HasInsecureContent>) final { }
-    void dispatchDidFailProvisionalLoad(const ResourceError&) final { }
+    void dispatchDidCommitLoad(Optional<HasInsecureContent>) final { }
+    void dispatchDidFailProvisionalLoad(const ResourceError&, WillContinueLoading) final { }
     void dispatchDidFailLoad(const ResourceError&) final { }
     void dispatchDidFinishDocumentLoad() final { }
     void dispatchDidFinishLoad() final { }
-    void dispatchDidReachLayoutMilestone(LayoutMilestones) final { }
+    void dispatchDidReachLayoutMilestone(OptionSet<LayoutMilestone>) final { }
 
     Frame* dispatchCreatePage(const NavigationAction&) final { return nullptr; }
     void dispatchShow() final { }
 
-    void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, FramePolicyFunction&&) final { }
-    void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, FramePolicyFunction&&) final;
-    void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, bool didReceiveRedirectResponse, FormState*, FramePolicyFunction&&) final;
+    void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, PolicyCheckIdentifier, const String&, FramePolicyFunction&&) final { }
+    void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, PolicyCheckIdentifier, FramePolicyFunction&&) final;
+    void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, const ResourceResponse& redirectResponse, FormState*, PolicyDecisionMode, PolicyCheckIdentifier, FramePolicyFunction&&) final;
     void cancelPolicyCheck() final { }
 
     void dispatchUnableToImplementPolicy(const ResourceError&) final { }
 
     void dispatchWillSendSubmitEvent(Ref<FormState>&&) final;
-    void dispatchWillSubmitForm(FormState&, WTF::Function<void(void)>&&) final;
+    void dispatchWillSubmitForm(FormState&, CompletionHandler<void()>&&) final;
 
     void revertToProvisionalState(DocumentLoader*) final { }
     void setMainDocumentError(DocumentLoader*, const ResourceError&) final { }
@@ -153,28 +159,25 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
     void savePlatformDataToCachedFrame(CachedFrame*) final { }
     void transitionToCommittedFromCachedFrame(CachedFrame*) final { }
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     void didRestoreFrameHierarchyForCachedFrame() final { }
 #endif
     void transitionToCommittedForNewPage() final { }
 
-    void didSaveToPageCache() final { }
-    void didRestoreFromPageCache() final { }
+    void didRestoreFromBackForwardCache() final { }
 
     void dispatchDidBecomeFrameset(bool) final { }
 
     void updateGlobalHistory() final { }
     void updateGlobalHistoryRedirectLinks() final { }
-    bool shouldGoToHistoryItem(HistoryItem*) const final { return false; }
-    void updateGlobalHistoryItemForPage() final { }
+    bool shouldGoToHistoryItem(HistoryItem&) const final { return false; }
     void saveViewStateToItem(HistoryItem&) final { }
     bool canCachePage() const final { return false; }
     void didDisplayInsecureContent() final { }
     void didRunInsecureContent(SecurityOrigin&, const URL&) final { }
     void didDetectXSS(const URL&, bool) final { }
-    RefPtr<Frame> createFrame(const URL&, const String&, HTMLFrameOwnerElement&, const String&, bool, int, int) final;
+    RefPtr<Frame> createFrame(const URL&, const String&, HTMLFrameOwnerElement&, const String&) final;
     RefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement&, const URL&, const Vector<String>&, const Vector<String>&, const String&, bool) final;
-    void recreatePlugin(Widget*) final;
     RefPtr<Widget> createJavaAppletWidget(const IntSize&, HTMLAppletElement&, const URL&, const Vector<String>&, const Vector<String>&) final;
 
     ObjectContentType objectContentType(const URL&, const String&) final { return ObjectContentType::None; }
@@ -185,7 +188,7 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
 #if PLATFORM(COCOA)
     RemoteAXObjectRef accessibilityRemoteObject() final { return nullptr; }
-    NSCachedURLResponse *willCacheResponse(DocumentLoader*, unsigned long, NSCachedURLResponse *response) const final { return response; }
+    void willCacheResponse(DocumentLoader*, unsigned long, NSCachedURLResponse *response, CompletionHandler<void(NSCachedURLResponse *)>&& completionHandler) const final { completionHandler(response); }
 #endif
 
 #if USE(CFURLCONNECTION)
@@ -194,16 +197,19 @@ class WEBCORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
     Ref<FrameNetworkingContext> createNetworkingContext() final;
 
-    bool isEmptyFrameLoaderClient() final { return true; }
+    bool isEmptyFrameLoaderClient() const final { return true; }
     void prefetchDNS(const String&) final { }
 
 #if USE(QUICK_LOOK)
-    RefPtr<PreviewLoaderClient> createPreviewLoaderClient(const String&, const String&) final { return nullptr; }
+    RefPtr<LegacyPreviewLoaderClient> createPreviewLoaderClient(const String&, const String&) final { return nullptr; }
 #endif
-#if HAVE(CFNETWORK_STORAGE_PARTITIONING)
+#if ENABLE(RESOURCE_LOAD_STATISTICS)
     bool hasFrameSpecificStorageAccess() final { return false; }
-    void setHasFrameSpecificStorageAccess(bool) final { }
 #endif
 };
 
-}
+} // namespace WebCore
+
+SPECIALIZE_TYPE_TRAITS_BEGIN(WebCore::EmptyFrameLoaderClient)
+    static bool isType(const WebCore::FrameLoaderClient& frameLoaderClient) { return frameLoaderClient.isEmptyFrameLoaderClient(); }
+SPECIALIZE_TYPE_TRAITS_END()

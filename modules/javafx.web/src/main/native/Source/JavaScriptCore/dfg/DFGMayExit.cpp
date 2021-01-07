@@ -47,7 +47,8 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     // This is a carefully curated list of nodes that definitely do not exit. We try to be very
     // conservative when maintaining this list, because adding new node types to it doesn't
     // generally make things a lot better but it might introduce subtle bugs.
-    case SetArgument:
+    case SetArgumentDefinitely:
+    case SetArgumentMaybe:
     case JSConstant:
     case DoubleConstant:
     case LazyJSConstant:
@@ -70,6 +71,7 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case BottomValue:
     case PutHint:
     case PhantomNewObject:
+    case PhantomNewArrayIterator:
     case PutStack:
     case KillStack:
     case GetStack:
@@ -92,6 +94,7 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case ValueRep:
     case ExtractOSREntryLocal:
     case ExtractCatchLocal:
+    case ClearCatchLocals:
     case LogicalNot:
     case NotifyWrite:
     case PutStructure:
@@ -99,8 +102,13 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case FencedStoreBarrier:
     case PutByOffset:
     case PutClosureVar:
+    case PutInternalField:
     case RecordRegExpCachedResult:
     case NukeStructureAndSetButterfly:
+    case FilterCallLinkStatus:
+    case FilterGetByStatus:
+    case FilterPutByIdStatus:
+    case FilterInByIdStatus:
         break;
 
     case StrCat:
@@ -114,14 +122,19 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case CreateActivation:
     case MaterializeCreateActivation:
     case MaterializeNewObject:
+    case MaterializeNewInternalFieldObject:
     case NewFunction:
     case NewGeneratorFunction:
     case NewAsyncFunction:
     case NewAsyncGeneratorFunction:
     case NewStringObject:
+    case NewSymbol:
+    case NewArrayIterator:
     case NewRegexp:
     case ToNumber:
+    case ToNumeric:
     case RegExpExecNonGlobalOrSticky:
+    case RegExpMatchFastGlobal:
         result = ExitsForExceptions;
         break;
 
@@ -165,13 +178,6 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
             // ObjectUse then it will.
             case ObjectUse:
             case ObjectOrOtherUse:
-                result = Exits;
-                break;
-
-            // These are shady because they check the structure even if the type of the child node
-            // passes the StringObject type filter.
-            case StringObjectUse:
-            case StringOrStringObjectUse:
                 result = Exits;
                 break;
 

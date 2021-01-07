@@ -44,22 +44,24 @@ CodeBlockHash::CodeBlockHash(const SourceCode& sourceCode, CodeSpecializationKin
     sha1.addBytes(sourceCode.toUTF8());
     SHA1::Digest digest;
     sha1.computeHash(digest);
-    m_hash += digest[0] | (digest[1] << 8) | (digest[2] << 16) | (digest[3] << 24);
-    m_hash ^= static_cast<unsigned>(kind);
+    m_hash = digest[0] | (digest[1] << 8) | (digest[2] << 16) | (digest[3] << 24);
 
-    // Ensure that 0 corresponds to the hash not having been computed.
-    if (!m_hash)
-        m_hash = 1;
+    if (m_hash == 0 || m_hash == 1)
+        m_hash += 0x2d5a93d0; // Ensures a non-zero hash, and gets us #Azero0 for CodeForCall and #Azero1 for CodeForConstruct.
+    static_assert(static_cast<unsigned>(CodeForCall) == 0, "");
+    static_assert(static_cast<unsigned>(CodeForConstruct) == 1, "");
+    m_hash ^= static_cast<unsigned>(kind);
+    ASSERT(m_hash);
 }
 
 void CodeBlockHash::dump(PrintStream& out) const
 {
     std::array<char, 7> buffer = integerToSixCharacterHashString(m_hash);
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     CodeBlockHash recompute(buffer.data());
     ASSERT(recompute == *this);
-#endif // !ASSERT_DISABLED
+#endif // ASSERT_ENABLED
 
     out.print(buffer.data());
 }

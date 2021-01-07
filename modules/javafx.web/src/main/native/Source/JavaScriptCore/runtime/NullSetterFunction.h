@@ -29,14 +29,15 @@
 
 namespace JSC {
 
-class NullSetterFunction : public InternalFunction {
+class NullSetterFunction final : public InternalFunction {
 public:
     typedef InternalFunction Base;
 
     static NullSetterFunction* create(VM& vm, Structure* structure)
     {
+        // Since NullSetterFunction is per JSGlobalObject, we use put-without-transition in InternalFunction::finishCreation.
         NullSetterFunction* function = new (NotNull, allocateCell< NullSetterFunction>(vm.heap))  NullSetterFunction(vm, structure);
-        function->finishCreation(vm, String());
+        function->finishCreation(vm, String(), NameAdditionMode::WithoutStructureTransition);
         return function;
     }
 
@@ -50,5 +51,6 @@ public:
 private:
     NullSetterFunction(VM&, Structure*);
 };
+STATIC_ASSERT_ISO_SUBSPACE_SHARABLE(NullSetterFunction, InternalFunction);
 
 } // namespace JSC

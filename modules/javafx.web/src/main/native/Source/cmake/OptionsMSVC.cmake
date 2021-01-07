@@ -7,11 +7,13 @@ add_compile_options(
     /wd6031 /wd6211 /wd6246 /wd6255 /wd6387
 )
 
-# Create pdb files for debugging purposes, also for Release builds
-add_compile_options(/Zi /GS)
+if (NOT WTF_CPU_X86)
+    # Create pdb files for debugging purposes, also for Release builds
+    add_compile_options(/Zi /GS)
 
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DEBUG /OPT:ICF /OPT:REF")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG /OPT:ICF /OPT:REF")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DEBUG /OPT:ICF /OPT:REF")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG /OPT:ICF /OPT:REF")
+endif ()
 
 # We do not use exceptions
 add_definitions(-D_HAS_EXCEPTIONS=0)
@@ -26,11 +28,14 @@ if (NOT COMPILER_IS_CLANG_CL)
     add_definitions(-D_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES=1)
 endif ()
 
-# Turn off certain link features
-add_compile_options(/Gy- /openmp- /GF-)
-
 # Specify the source code encoding
 add_compile_options(/utf-8 /validate-charset)
+
+# Enable the new lambda processor for better C++ conformance with /std:c++17
+# TODO : Enable it after Upgrade to VS2019
+# if (NOT COMPILER_IS_CLANG_CL)
+#    add_compile_options(/experimental:newLambdaProcessor)
+# endif ()
 
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /OPT:NOREF /OPT:NOICF")
@@ -52,7 +57,10 @@ if (NOT ${CMAKE_CXX_FLAGS} STREQUAL "")
     string(REGEX REPLACE "(/EH[a-z]+) " "\\1- " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}) # Disable C++ exceptions
     string(REGEX REPLACE "/EHsc$" "/EHs- /EHc- " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}) # Disable C++ exceptions
     string(REGEX REPLACE "/GR " "/GR- " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}) # Disable RTTI
-    string(REGEX REPLACE "/W3" "/W4" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}) # Warnings are important
+    # More warnings. /W4 should be specified before -Wno-* options for clang-cl.
+    string(REGEX REPLACE "/W3" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+    string(REGEX REPLACE "/W3" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(/W4)
 endif ()
 
 if (MSVC_STATIC_RUNTIME)

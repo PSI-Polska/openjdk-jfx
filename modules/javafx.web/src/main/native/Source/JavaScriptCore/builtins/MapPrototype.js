@@ -25,14 +25,14 @@
 
 @constructor
 @globalPrivate
-function createMapIterator(iteratedObject, kind)
+function MapIterator(iteratedObject, kind)
 {
     "use strict";
 
     @assert(@isMap(iteratedObject));
-    this.@iteratedObject = iteratedObject;
-    this.@mapIteratorKind = kind;
-    this.@mapBucket = @mapBucketHead(iteratedObject);
+    @putByIdDirectPrivate(this, "iteratedObject", iteratedObject);
+    @putByIdDirectPrivate(this, "mapIteratorKind", kind);
+    @putByIdDirectPrivate(this, "mapBucket", @mapBucketHead(iteratedObject));
 }
 
 function values()
@@ -42,7 +42,7 @@ function values()
     if (!@isMap(this))
         @throwTypeError("Map.prototype.values requires that |this| be Map");
 
-    return new @createMapIterator(this, @iterationKindValue);
+    return new @MapIterator(this, @iterationKindValue);
 }
 
 function keys()
@@ -52,7 +52,7 @@ function keys()
     if (!@isMap(this))
         @throwTypeError("Map.prototype.keys requires that |this| be Map");
 
-    return new @createMapIterator(this, @iterationKindKey);
+    return new @MapIterator(this, @iterationKindKey);
 }
 
 function entries()
@@ -62,7 +62,7 @@ function entries()
     if (!@isMap(this))
         @throwTypeError("Map.prototype.entries requires that |this| be Map");
 
-    return new @createMapIterator(this, @iterationKindKeyValue);
+    return new @MapIterator(this, @iterationKindEntries);
 }
 
 function forEach(callback /*, thisArg */)

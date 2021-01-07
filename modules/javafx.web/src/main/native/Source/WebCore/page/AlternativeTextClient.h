@@ -29,11 +29,6 @@
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
-#if PLATFORM(MAC)
-// Some platforms provide UI for suggesting alternative dictation text.
-#define USE_DICTATION_ALTERNATIVES 1
-#endif
-
 namespace WebCore {
 
 enum ReasonForDismissingAlternativeText {
@@ -58,7 +53,6 @@ enum class AutocorrectionResponse {
 class AlternativeTextClient {
 public:
     virtual ~AlternativeTextClient() = default;
-    virtual void pageDestroyed() = 0;
 #if USE(AUTOCORRECTION_PANEL)
     virtual void showCorrectionAlternative(AlternativeTextType, const FloatRect& boundingBoxOfReplacedString, const String& replacedString, const String& replacmentString, const Vector<String>& alternativeReplacementStrings) = 0;
     virtual void dismissAlternative(ReasonForDismissingAlternativeText) = 0;

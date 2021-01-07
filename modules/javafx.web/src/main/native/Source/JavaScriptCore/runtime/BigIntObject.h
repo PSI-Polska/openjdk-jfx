@@ -31,16 +31,17 @@
 
 namespace JSC {
 
-class BigIntObject : public JSWrapperObject {
+class BigIntObject final : public JSWrapperObject {
 public:
     using Base = JSWrapperObject;
 
-    static BigIntObject* create(VM& vm, JSGlobalObject* globalObject, JSBigInt* bigInt)
+    template<typename, SubspaceAccess mode>
+    static IsoSubspace* subspaceFor(VM& vm)
     {
-        BigIntObject* object = new (NotNull, allocateCell<BigIntObject>(vm.heap)) BigIntObject(vm, globalObject->bigIntObjectStructure());
-        object->finishCreation(vm, bigInt);
-        return object;
+        return vm.bigIntObjectSpace<mode>();
     }
+
+    static BigIntObject* create(VM&, JSGlobalObject*, JSBigInt*);
 
     DECLARE_EXPORT_INFO;
 
@@ -51,9 +52,9 @@ public:
         return Structure::create(vm, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), info());
     }
 
-    static JSValue defaultValue(const JSObject*, ExecState*, PreferredPrimitiveType);
+    static JSValue defaultValue(const JSObject*, JSGlobalObject*, PreferredPrimitiveType);
 
-    static String toStringName(const JSObject*, ExecState*);
+    static String toStringName(const JSObject*, JSGlobalObject*);
 
 protected:
     JS_EXPORT_PRIVATE void finishCreation(VM&, JSBigInt*);

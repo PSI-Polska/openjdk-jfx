@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -10,17 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL APPLE INC. OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS''
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -28,74 +28,99 @@
 
 #if ENABLE(WEBGPU)
 
+#include "GPUBindGroup.h"
+#include "GPUBindGroupAllocator.h"
+#include "GPUBindGroupDescriptor.h"
+#include "GPUBindGroupLayout.h"
+#include "GPUBindGroupLayoutDescriptor.h"
 #include "GPUBuffer.h"
-#include "GPUCommandQueue.h"
-#include "GPUDrawable.h"
-#include "GPULibrary.h"
+#include "GPUBufferDescriptor.h"
+#include "GPUCommandBuffer.h"
+#include "GPUComputePipeline.h"
+#include "GPUComputePipelineDescriptor.h"
+#include "GPUErrorScopes.h"
+#include "GPUPipelineLayout.h"
+#include "GPUPipelineLayoutDescriptor.h"
+#include "GPURenderPipeline.h"
+#include "GPURenderPipelineDescriptor.h"
+#include "GPUSampler.h"
+#include "GPUSamplerDescriptor.h"
+#include "GPUShaderModule.h"
+#include "GPUShaderModuleDescriptor.h"
+#include "GPUSwapChainDescriptor.h"
 #include "GPUTexture.h"
 #include "GPUTextureDescriptor.h"
-#include "Logging.h"
+#include <algorithm>
+#include <wtf/Optional.h>
 
 namespace WebCore {
 
-RefPtr<GPUDevice> GPUDevice::create()
+RefPtr<GPUBuffer> GPUDevice::tryCreateBuffer(const GPUBufferDescriptor& descriptor, GPUBufferMappedOption isMapped, GPUErrorScopes& errorScopes)
 {
-    RefPtr<GPUDevice> device = adoptRef(new GPUDevice());
-
-#if PLATFORM(COCOA)
-    if (!device->platformDevice()) {
-        LOG(WebGPU, "GPUDevice::create() was unable to create the low-level device");
-        return nullptr;
-    }
-#endif
-
-    LOG(WebGPU, "GPUDevice::create() device is %p", device.get());
-    return device;
+    return GPUBuffer::tryCreate(*this, descriptor, isMapped, errorScopes);
 }
 
-GPUDevice::~GPUDevice()
+RefPtr<GPUTexture> GPUDevice::tryCreateTexture(const GPUTextureDescriptor& descriptor) const
 {
-    LOG(WebGPU, "GPUDevice::~GPUDevice()");
+    return GPUTexture::tryCreate(*this, descriptor);
 }
 
-RefPtr<GPUCommandQueue> GPUDevice::createCommandQueue()
+RefPtr<GPUSampler> GPUDevice::tryCreateSampler(const GPUSamplerDescriptor& descriptor) const
 {
-    return GPUCommandQueue::create(this);
+    return GPUSampler::tryCreate(*this, descriptor);
 }
 
-RefPtr<GPULibrary> GPUDevice::createLibrary(const String& sourceCode)
+RefPtr<GPUBindGroupLayout> GPUDevice::tryCreateBindGroupLayout(const GPUBindGroupLayoutDescriptor& descriptor) const
 {
-    return GPULibrary::create(this, sourceCode);
+    return GPUBindGroupLayout::tryCreate(*this, descriptor);
 }
 
-RefPtr<GPUBuffer> GPUDevice::createBufferFromData(ArrayBufferView* data)
+Ref<GPUPipelineLayout> GPUDevice::createPipelineLayout(GPUPipelineLayoutDescriptor&& descriptor) const
 {
-    return GPUBuffer::create(this, data);
+    return GPUPipelineLayout::create(WTFMove(descriptor));
 }
 
-RefPtr<GPUTexture> GPUDevice::createTexture(GPUTextureDescriptor* descriptor)
+RefPtr<GPUShaderModule> GPUDevice::tryCreateShaderModule(const GPUShaderModuleDescriptor& descriptor) const
 {
-    return GPUTexture::create(this, descriptor);
+    return GPUShaderModule::tryCreate(*this, descriptor);
 }
 
-RefPtr<GPUDrawable> GPUDevice::getFramebuffer()
+RefPtr<GPURenderPipeline> GPUDevice::tryCreateRenderPipeline(const GPURenderPipelineDescriptor& descriptor, GPUErrorScopes& errorScopes) const
 {
-    return GPUDrawable::create(this);
+    return GPURenderPipeline::tryCreate(*this, descriptor, errorScopes);
 }
 
-#if !PLATFORM(COCOA)
-
-GPUDevice::GPUDevice()
+RefPtr<GPUComputePipeline> GPUDevice::tryCreateComputePipeline(const GPUComputePipelineDescriptor& descriptor, GPUErrorScopes& errorScopes) const
 {
-
+    return GPUComputePipeline::tryCreate(*this, descriptor, errorScopes);
 }
 
-void GPUDevice::reshape(int, int)
+RefPtr<GPUBindGroup> GPUDevice::tryCreateBindGroup(const GPUBindGroupDescriptor& descriptor, GPUErrorScopes& errorScopes) const
 {
+    if (!m_bindGroupAllocator)
+        m_bindGroupAllocator = GPUBindGroupAllocator::create(errorScopes);
+
+    return GPUBindGroup::tryCreate(descriptor, *m_bindGroupAllocator);
 }
 
-#endif
+RefPtr<GPUCommandBuffer> GPUDevice::tryCreateCommandBuffer() const
+{
+    return GPUCommandBuffer::tryCreate(*this);
+}
+
+RefPtr<GPUQueue> GPUDevice::tryGetQueue() const
+{
+    if (!m_queue)
+        m_queue = GPUQueue::tryCreate(*this);
+
+    return m_queue;
+}
+
+void GPUDevice::setSwapChain(RefPtr<GPUSwapChain>&& swapChain)
+{
+    m_swapChain = WTFMove(swapChain);
+}
 
 } // namespace WebCore
 
-#endif
+#endif // ENABLE(WEBGPU)

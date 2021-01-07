@@ -28,6 +28,7 @@
 namespace WebCore {
 
 class HTMLLabelElement final : public HTMLElement {
+    WTF_MAKE_ISO_ALLOCATED(HTMLLabelElement);
 public:
     static Ref<HTMLLabelElement> create(const QualifiedName&, Document&);
 
@@ -39,6 +40,8 @@ public:
 private:
     HTMLLabelElement(const QualifiedName&, Document&);
 
+    bool isEventTargetedAtInteractiveDescendants(Event&) const;
+
     void accessKeyAction(bool sendMouseEvents) final;
 
     // Overridden to update the hover/active state of the corresponding control.
@@ -49,6 +52,8 @@ private:
     void defaultEventHandler(Event&) final;
 
     void focus(bool restorePreviousSelection, FocusDirection) final;
+
+    bool isInteractiveContent() const final { return true; }
 };
 
 } //namespace

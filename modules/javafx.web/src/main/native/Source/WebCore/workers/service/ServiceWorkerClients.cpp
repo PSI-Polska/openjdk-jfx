@@ -30,11 +30,14 @@
 
 #include "JSDOMPromiseDeferred.h"
 #include "JSServiceWorkerWindowClient.h"
+#include "SWContextManager.h"
+#include "ServiceWorker.h"
 #include "ServiceWorkerGlobalScope.h"
+#include "ServiceWorkerThread.h"
 
 namespace WebCore {
 
-static inline void didFinishGetRequest(ServiceWorkerGlobalScope& scope, DeferredPromise& promise, ExceptionOr<std::optional<ServiceWorkerClientData>>&& clientData)
+static inline void didFinishGetRequest(ServiceWorkerGlobalScope& scope, DeferredPromise& promise, ExceptionOr<Optional<ServiceWorkerClientData>>&& clientData)
 {
     if (clientData.hasException()) {
         promise.reject(clientData.releaseException());
@@ -104,7 +107,7 @@ void ServiceWorkerClients::matchAll(ScriptExecutionContext& context, const Clien
 void ServiceWorkerClients::openWindow(ScriptExecutionContext&, const String& url, Ref<DeferredPromise>&& promise)
 {
     UNUSED_PARAM(url);
-    promise->reject(Exception { NotSupportedError, ASCIILiteral("clients.openWindow() is not yet supported") });
+    promise->reject(Exception { NotSupportedError, "clients.openWindow() is not yet supported"_s });
 }
 
 void ServiceWorkerClients::claim(ScriptExecutionContext& context, Ref<DeferredPromise>&& promise)
@@ -114,7 +117,7 @@ void ServiceWorkerClients::claim(ScriptExecutionContext& context, Ref<DeferredPr
     auto serviceWorkerIdentifier = serviceWorkerGlobalScope.thread().identifier();
 
     if (!serviceWorkerGlobalScope.registration().active() || serviceWorkerGlobalScope.registration().active()->identifier() != serviceWorkerIdentifier) {
-        promise->reject(Exception { InvalidStateError, ASCIILiteral("Service worker is not active") });
+        promise->reject(Exception { InvalidStateError, "Service worker is not active"_s });
         return;
     }
 

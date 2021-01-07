@@ -93,10 +93,10 @@ void FormSubmission::Attributes::parseAction(const String& action)
 String FormSubmission::Attributes::parseEncodingType(const String& type)
 {
     if (equalLettersIgnoringASCIICase(type, "multipart/form-data"))
-        return ASCIILiteral("multipart/form-data");
+        return "multipart/form-data"_s;
     if (equalLettersIgnoringASCIICase(type, "text/plain"))
-        return ASCIILiteral("text/plain");
-    return ASCIILiteral("application/x-www-form-urlencoded");
+        return "text/plain"_s;
+    return "application/x-www-form-urlencoded"_s;
 }
 
 void FormSubmission::Attributes::updateEncodingType(const String& type)
@@ -133,10 +133,7 @@ static TextEncoding encodingFromAcceptCharset(const String& acceptCharset, Docum
     String normalizedAcceptCharset = acceptCharset;
     normalizedAcceptCharset.replace(',', ' ');
 
-    Vector<String> charsets;
-    normalizedAcceptCharset.split(' ', charsets);
-
-    for (auto& charset : charsets) {
+    for (auto& charset : normalizedAcceptCharset.split(' ')) {
         TextEncoding encoding(charset);
         if (encoding.isValid())
             return encoding;
@@ -150,7 +147,7 @@ Ref<FormSubmission> FormSubmission::create(HTMLFormElement& form, const Attribut
     auto copiedAttributes = attributes;
 
     if (auto* submitButton = form.findSubmitButton(event)) {
-        AtomicString attributeValue;
+        AtomString attributeValue;
         if (!(attributeValue = submitButton->attributeWithoutSynchronization(formactionAttr)).isNull())
             copiedAttributes.parseAction(attributeValue);
         if (!(attributeValue = submitButton->attributeWithoutSynchronization(formenctypeAttr)).isNull())
@@ -178,7 +175,7 @@ Ref<FormSubmission> FormSubmission::create(HTMLFormElement& form, const Attribut
     }
 
     auto dataEncoding = isMailtoForm ? UTF8Encoding() : encodingFromAcceptCharset(copiedAttributes.acceptCharset(), document);
-    auto domFormData = DOMFormData::create(dataEncoding.encodingForFormSubmission());
+    auto domFormData = DOMFormData::create(dataEncoding.encodingForFormSubmissionOrURLParsing());
     StringPairVector formValues;
 
     bool containsPasswordData = false;
@@ -201,7 +198,7 @@ Ref<FormSubmission> FormSubmission::create(HTMLFormElement& form, const Attribut
     String boundary;
 
     if (isMultiPartForm) {
-        formData = FormData::createMultiPart(domFormData, &document);
+        formData = FormData::createMultiPart(domFormData);
         boundary = formData->boundary().data();
     } else {
         formData = FormData::create(domFormData, attributes.method() == Method::Get ? FormData::FormURLEncoded : FormData::parseEncodingType(encodingType));

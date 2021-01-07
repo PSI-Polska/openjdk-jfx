@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010, 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,7 +24,7 @@
  */
 
 #include "config.h"
-#include "RunLoop.h"
+#include <wtf/RunLoop.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <dispatch/dispatch.h>
@@ -51,15 +51,22 @@ RunLoop::~RunLoop()
     CFRunLoopSourceInvalidate(m_runLoopSource.get());
 }
 
-void RunLoop::runForDuration(double duration)
+void RunLoop::runForDuration(Seconds duration)
 {
-    CFRunLoopRunInMode(kCFRunLoopDefaultMode, duration, true);
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, duration.seconds(), true);
 }
 
 void RunLoop::wakeUp()
 {
     CFRunLoopSourceSignal(m_runLoopSource.get());
     CFRunLoopWakeUp(m_runLoop.get());
+}
+
+RunLoop::CycleResult RunLoop::cycle(RunLoopMode mode)
+{
+    CFTimeInterval timeInterval = 0.05;
+    CFRunLoopRunInMode(mode, timeInterval, true);
+    return CycleResult::Continue;
 }
 
 void RunLoop::run()
@@ -94,14 +101,14 @@ RunLoop::TimerBase::~TimerBase()
     stop();
 }
 
-void RunLoop::TimerBase::start(double nextFireInterval, bool repeat)
+void RunLoop::TimerBase::start(Seconds nextFireInterval, bool repeat)
 {
     if (m_timer)
         stop();
 
     CFRunLoopTimerContext context = { 0, this, 0, 0, 0 };
-    CFTimeInterval repeatInterval = repeat ? nextFireInterval : 0;
-    m_timer = adoptCF(CFRunLoopTimerCreate(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + nextFireInterval, repeatInterval, 0, 0, timerFired, &context));
+    Seconds repeatInterval = repeat ? nextFireInterval : 0_s;
+    m_timer = adoptCF(CFRunLoopTimerCreate(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + nextFireInterval.seconds(), repeatInterval.seconds(), 0, 0, timerFired, &context));
     CFRunLoopAddTimer(m_runLoop->m_runLoop.get(), m_timer.get(), kCFRunLoopCommonModes);
 }
 

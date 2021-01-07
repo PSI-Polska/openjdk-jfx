@@ -30,30 +30,35 @@
 #include "CacheQueryOptions.h"
 #include "Exception.h"
 #include "HTTPParsers.h"
+#include "ScriptExecutionContext.h"
 
 namespace WebCore {
 
 namespace DOMCacheEngine {
 
-static inline Exception errorToException(Error error)
+Exception convertToException(Error error)
 {
     switch (error) {
     case Error::NotImplemented:
-        return Exception { NotSupportedError, ASCIILiteral("Not implemented") };
+        return Exception { NotSupportedError, "Not implemented"_s };
     case Error::ReadDisk:
-        return Exception { TypeError, ASCIILiteral("Failed reading data from the file system") };
+        return Exception { TypeError, "Failed reading data from the file system"_s };
     case Error::WriteDisk:
-        return Exception { TypeError, ASCIILiteral("Failed writing data to the file system") };
+        return Exception { TypeError, "Failed writing data to the file system"_s };
     case Error::QuotaExceeded:
-        return Exception { QuotaExceededError, ASCIILiteral("Quota exceeded") };
-    default:
-        return Exception { TypeError, ASCIILiteral("Internal error") };
+        return Exception { QuotaExceededError, "Quota exceeded"_s };
+    case Error::Internal:
+        return Exception { TypeError, "Internal error"_s };
+    case Error::Stopped:
+        return Exception { TypeError, "Context is stopped"_s };
     }
+    ASSERT_NOT_REACHED();
+    return Exception { TypeError, "Connection stopped"_s };
 }
 
 Exception convertToExceptionAndLog(ScriptExecutionContext* context, Error error)
 {
-    auto exception = errorToException(error);
+    auto exception = convertToException(error);
     if (context)
         context->addConsoleMessage(MessageSource::JS, MessageLevel::Error, makeString("Cache API operation failed: ", exception.message()));
     return exception;
@@ -88,7 +93,7 @@ bool queryCacheMatch(const ResourceRequest& request, const ResourceRequest& cach
         return true;
 
     bool isVarying = false;
-    varyValue.split(',', false, [&](StringView view) {
+    varyValue.split(',', [&](StringView view) {
         if (isVarying)
             return;
         auto nameView = stripLeadingAndTrailingHTTPSpaces(view);

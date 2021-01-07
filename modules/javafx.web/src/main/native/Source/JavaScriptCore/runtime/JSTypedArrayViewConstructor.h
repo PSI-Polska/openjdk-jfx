@@ -32,7 +32,7 @@ namespace JSC {
 class JSTypedArrayViewPrototype;
 class GetterSetter;
 
-class JSTypedArrayViewConstructor : public InternalFunction {
+class JSTypedArrayViewConstructor final : public InternalFunction {
 public:
     typedef InternalFunction Base;
 
@@ -52,5 +52,6 @@ public:
 
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue prototype);
 };
+STATIC_ASSERT_ISO_SUBSPACE_SHARABLE(JSTypedArrayViewConstructor, InternalFunction);
 
 } // namespace JSC

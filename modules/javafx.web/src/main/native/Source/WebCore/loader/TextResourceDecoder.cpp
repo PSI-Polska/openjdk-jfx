@@ -34,33 +34,18 @@
 
 
 namespace WebCore {
-using namespace WTF;
 
 using namespace HTMLNames;
 
-static inline bool bytesEqual(const char* p, char b0, char b1)
+static constexpr bool bytesEqual(const char* p, char b)
 {
-    return p[0] == b0 && p[1] == b1;
+    return *p == b;
 }
 
-static inline bool bytesEqual(const char* p, char b0, char b1, char b2, char b3, char b4)
+template<typename... T>
+static constexpr bool bytesEqual(const char* p, char b, T... bs)
 {
-    return p[0] == b0 && p[1] == b1 && p[2] == b2 && p[3] == b3 && p[4] == b4;
-}
-
-static inline bool bytesEqual(const char* p, char b0, char b1, char b2, char b3, char b4, char b5)
-{
-    return p[0] == b0 && p[1] == b1 && p[2] == b2 && p[3] == b3 && p[4] == b4 && p[5] == b5;
-}
-
-static inline bool bytesEqual(const char* p, char b0, char b1, char b2, char b3, char b4, char b5, char b6, char b7)
-{
-    return p[0] == b0 && p[1] == b1 && p[2] == b2 && p[3] == b3 && p[4] == b4 && p[5] == b5 && p[6] == b6 && p[7] == b7;
-}
-
-static inline bool bytesEqual(const char* p, char b0, char b1, char b2, char b3, char b4, char b5, char b6, char b7, char b8, char b9)
-{
-    return p[0] == b0 && p[1] == b1 && p[2] == b2 && p[3] == b3 && p[4] == b4 && p[5] == b5 && p[6] == b6 && p[7] == b7 && p[8] == b8 && p[9] == b9;
+    return *p == b && bytesEqual(p + 1, bs...);
 }
 
 // You might think we should put these find functions elsewhere, perhaps with the
@@ -415,9 +400,9 @@ size_t TextResourceDecoder::checkForBOM(const char* data, size_t len)
     size_t buf2Len = len;
     const unsigned char* buf1 = reinterpret_cast<const unsigned char*>(m_buffer.data());
     const unsigned char* buf2 = reinterpret_cast<const unsigned char*>(data);
-    unsigned char c1 = buf1Len ? (--buf1Len, *buf1++) : buf2Len ? (--buf2Len, *buf2++) : 0;
-    unsigned char c2 = buf1Len ? (--buf1Len, *buf1++) : buf2Len ? (--buf2Len, *buf2++) : 0;
-    unsigned char c3 = buf1Len ? (--buf1Len, *buf1++) : buf2Len ? (--buf2Len, *buf2++) : 0;
+    unsigned char c1 = buf1Len ? (static_cast<void>(--buf1Len), *buf1++) : buf2Len ? (static_cast<void>(--buf2Len), *buf2++) : 0;
+    unsigned char c2 = buf1Len ? (static_cast<void>(--buf1Len), *buf1++) : buf2Len ? (static_cast<void>(--buf2Len), *buf2++) : 0;
+    unsigned char c3 = buf1Len ? (static_cast<void>(--buf1Len), *buf1++) : buf2Len ? (static_cast<void>(--buf2Len), *buf2++) : 0;
 
     // Check for the BOM.
     if (c1 == 0xFF && c2 == 0xFE) {
@@ -536,7 +521,7 @@ bool TextResourceDecoder::checkForHeadCharset(const char* data, size_t len, bool
     if (m_contentType == XML)
         return true;
 
-    m_charsetParser = std::make_unique<HTMLMetaCharsetParser>();
+    m_charsetParser = makeUnique<HTMLMetaCharsetParser>();
     return checkForMetaCharset(data, len);
 }
 
@@ -657,6 +642,18 @@ String TextResourceDecoder::decodeAndFlush(const char* data, size_t length)
 {
     String decoded = decode(data, length);
     return decoded + flush();
+}
+
+const TextEncoding* TextResourceDecoder::encodingForURLParsing()
+{
+    // For UTF-{7,16,32}, we want to use UTF-8 for the query part as
+    // we do when submitting a form. A form with GET method
+    // has its contents added to a URL as query params and it makes sense
+    // to be consistent.
+    auto& encoding = m_encoding.encodingForFormSubmissionOrURLParsing();
+    if (encoding == UTF8Encoding())
+        return nullptr;
+    return &encoding;
 }
 
 }

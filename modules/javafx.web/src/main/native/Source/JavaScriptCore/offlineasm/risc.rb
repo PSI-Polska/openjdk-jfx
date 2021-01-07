@@ -362,7 +362,7 @@ class Immediate
     end
 end
 
-def riscLowerMalformedImmediates(list, validImmediates)
+def riscLowerMalformedImmediates(list, validImmediates, validLogicalImmediates)
     newList = []
     list.each {
         | node |
@@ -395,6 +395,8 @@ def riscLowerMalformedImmediates(list, validImmediates)
                 else
                     newList << node.riscLowerMalformedImmediatesRecurse(newList, validImmediates)
                 end
+            when "ori", "orh", "orp", "oris", "xori", "xorp", "andi", "andp"
+                newList << node.riscLowerMalformedImmediatesRecurse(newList, validLogicalImmediates)
             else
                 newList << node.riscLowerMalformedImmediatesRecurse(newList, validImmediates)
             end
@@ -448,13 +450,19 @@ end
 
 def riscLowerMisplacedAddresses(list)
     newList = []
+    hasBackendSpecificLowering = Instruction.respond_to? "lowerMisplacedAddresses#{$activeBackend}"
     list.each {
         | node |
         if node.is_a? Instruction
+            if hasBackendSpecificLowering
+                wasHandled, newList = Instruction.send("lowerMisplacedAddresses#{$activeBackend}", node, newList)
+                next if wasHandled
+            end
+
             postInstructions = []
             annotation = node.annotation
             case node.opcode
-            when "addi", "addis", "andi", "lshifti", "muli", "negi", "noti", "ori", "oris",
+            when "addi", "addis", "andi", "lshifti", "muli", "negi", "noti", "ori", "orh", "oris",
                 "rshifti", "urshifti", "subi", "subis", "xori", /^bi/, /^bti/, /^ci/, /^ti/
                 newList << Instruction.new(node.codeOrigin,
                                            node.opcode,

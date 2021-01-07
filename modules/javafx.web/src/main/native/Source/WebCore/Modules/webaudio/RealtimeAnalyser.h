@@ -25,7 +25,6 @@
 #pragma once
 
 #include "AudioArray.h"
-#include "FFTFrame.h"
 #include <JavaScriptCore/Float32Array.h>
 #include <JavaScriptCore/Uint8Array.h>
 #include <memory>
@@ -35,9 +34,11 @@
 namespace WebCore {
 
 class AudioBus;
+class FFTFrame;
 
 class RealtimeAnalyser {
     WTF_MAKE_NONCOPYABLE(RealtimeAnalyser);
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     RealtimeAnalyser();
     virtual ~RealtimeAnalyser();

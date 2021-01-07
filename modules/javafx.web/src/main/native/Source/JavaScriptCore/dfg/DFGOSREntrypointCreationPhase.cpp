@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,12 +47,12 @@ public:
 
     bool run()
     {
-        RELEASE_ASSERT(m_graph.m_plan.mode == FTLForOSREntryMode);
+        RELEASE_ASSERT(m_graph.m_plan.mode() == FTLForOSREntryMode);
         RELEASE_ASSERT(m_graph.m_form == ThreadedCPS);
 
-        unsigned bytecodeIndex = m_graph.m_plan.osrEntryBytecodeIndex;
+        BytecodeIndex bytecodeIndex = m_graph.m_plan.osrEntryBytecodeIndex();
         RELEASE_ASSERT(bytecodeIndex);
-        RELEASE_ASSERT(bytecodeIndex != UINT_MAX);
+        RELEASE_ASSERT(bytecodeIndex.offset());
 
         // Needed by createPreHeader().
         m_graph.ensureCPSDominators();
@@ -92,20 +92,20 @@ public:
         BasicBlock* newRoot = insertionSet.insert(0, 1);
 
         // We'd really like to use an unset origin, but ThreadedCPS won't allow that.
-        NodeOrigin origin = NodeOrigin(CodeOrigin(0), CodeOrigin(0), false);
+        NodeOrigin origin = NodeOrigin(CodeOrigin(BytecodeIndex(0)), CodeOrigin(BytecodeIndex(0)), false);
 
-        Vector<Node*> locals(baseline->m_numCalleeLocals);
-        for (int local = 0; local < baseline->m_numCalleeLocals; ++local) {
+        Vector<Node*> locals(baseline->numCalleeLocals());
+        for (int local = 0; local < baseline->numCalleeLocals(); ++local) {
             Node* previousHead = target->variablesAtHead.local(local);
             if (!previousHead)
                 continue;
             VariableAccessData* variable = previousHead->variableAccessData();
             locals[local] = newRoot->appendNode(
                 m_graph, variable->prediction(), ExtractOSREntryLocal, origin,
-                OpInfo(variable->local().offset()));
+                OpInfo(variable->operand().virtualRegister()));
 
             newRoot->appendNode(
-                m_graph, SpecNone, MovHint, origin, OpInfo(variable->local().offset()),
+                m_graph, SpecNone, MovHint, origin, OpInfo(variable->operand().virtualRegister()),
                 Edge(locals[local]));
         }
 
@@ -117,16 +117,16 @@ public:
         for (int argument = 0; argument < baseline->numParameters(); ++argument) {
             Node* oldNode = target->variablesAtHead.argument(argument);
             if (!oldNode) {
-                // Just for sanity, always have a SetArgument even if it's not needed.
+                // Just for sanity, always have a SetArgumentDefinitely even if it's not needed.
                 oldNode = newArguments[argument];
             }
             Node* node = newRoot->appendNode(
-                m_graph, SpecNone, SetArgument, origin,
+                m_graph, SpecNone, SetArgumentDefinitely, origin,
                 OpInfo(oldNode->variableAccessData()));
             newArguments[argument] = node;
         }
 
-        for (int local = 0; local < baseline->m_numCalleeLocals; ++local) {
+        for (int local = 0; local < baseline->numCalleeLocals(); ++local) {
             Node* previousHead = target->variablesAtHead.local(local);
             if (!previousHead)
                 continue;

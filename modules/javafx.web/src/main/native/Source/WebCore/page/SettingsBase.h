@@ -34,14 +34,14 @@
 #include "StorageMap.h"
 #include "TextFlags.h"
 #include "Timer.h"
-#include "URL.h"
+#include <wtf/URL.h>
 #include "WritingMode.h"
 #include <JavaScriptCore/RuntimeFlags.h>
 #include <unicode/uscript.h>
 #include <wtf/HashMap.h>
 #include <wtf/RefCounted.h>
-#include <wtf/text/AtomicString.h>
-#include <wtf/text/AtomicStringHash.h>
+#include <wtf/text/AtomString.h>
+#include <wtf/text/AtomStringHash.h>
 
 #if ENABLE(DATA_DETECTION)
 #include "DataDetection.h"
@@ -81,7 +81,7 @@ enum PDFImageCachingPolicy {
     PDFImageCachingBelowMemoryLimit,
     PDFImageCachingDisabled,
     PDFImageCachingClipBoundsOnly,
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     PDFImageCachingDefault = PDFImageCachingBelowMemoryLimit
 #else
     PDFImageCachingDefault = PDFImageCachingEnabled
@@ -104,6 +104,7 @@ public:
     void pageDestroyed() { m_page = nullptr; }
 
     enum class FontLoadTimingOverride { None, Block, Swap, Failure };
+    enum class ParserScriptingFlagPolicy : uint8_t { OnlyIfScriptIsEnabled, Enabled };
 
     // FIXME: Move these default values to SettingsDefaultValues.h
 
@@ -111,40 +112,61 @@ public:
     static const SettingsBase::ForcedAccessibilityValue defaultForcedColorsAreInvertedAccessibilityValue = ForcedAccessibilityValue::System;
     static const SettingsBase::ForcedAccessibilityValue defaultForcedDisplayIsMonochromeAccessibilityValue = ForcedAccessibilityValue::System;
     static const SettingsBase::ForcedAccessibilityValue defaultForcedPrefersReducedMotionAccessibilityValue = ForcedAccessibilityValue::System;
+    static const SettingsBase::ForcedAccessibilityValue defaultForcedSupportsHighDynamicRangeValue = ForcedAccessibilityValue::System;
 
     WEBCORE_EXPORT static bool defaultTextAutosizingEnabled();
     WEBCORE_EXPORT static float defaultMinimumZoomFontSize();
+    WEBCORE_EXPORT static bool defaultDownloadableBinaryFontsEnabled();
+    WEBCORE_EXPORT static bool defaultContentChangeObserverEnabled();
+
+#if ENABLE(MEDIA_SOURCE)
+    WEBCORE_EXPORT static bool platformDefaultMediaSourceEnabled();
+#endif
 
     static const unsigned defaultMaximumHTMLParserDOMTreeDepth = 512;
     static const unsigned defaultMaximumRenderTreeDepth = 512;
 
+#if ENABLE(TEXT_AUTOSIZING)
+    constexpr static const float boostedOneLineTextMultiplierCoefficient = 2.23125f;
+    constexpr static const float boostedMultiLineTextMultiplierCoefficient = 2.48125f;
+    constexpr static const float boostedMaxTextAutosizingScaleIncrease = 5.0f;
+    constexpr static const float defaultOneLineTextMultiplierCoefficient = 1.7f;
+    constexpr static const float defaultMultiLineTextMultiplierCoefficient = 1.95f;
+    constexpr static const float defaultMaxTextAutosizingScaleIncrease = 1.7f;
+#endif
 
-    WEBCORE_EXPORT void setStandardFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& standardFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setStandardFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& standardFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setFixedFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& fixedFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setFixedFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& fixedFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setSerifFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& serifFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setSerifFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& serifFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setSansSerifFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& sansSerifFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setSansSerifFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& sansSerifFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setCursiveFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& cursiveFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setCursiveFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& cursiveFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setFantasyFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& fantasyFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setFantasyFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& fantasyFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
-    WEBCORE_EXPORT void setPictographFontFamily(const AtomicString&, UScriptCode = USCRIPT_COMMON);
-    WEBCORE_EXPORT const AtomicString& pictographFontFamily(UScriptCode = USCRIPT_COMMON) const;
+    WEBCORE_EXPORT void setPictographFontFamily(const AtomString&, UScriptCode = USCRIPT_COMMON);
+    WEBCORE_EXPORT const AtomString& pictographFontFamily(UScriptCode = USCRIPT_COMMON) const;
 
     WEBCORE_EXPORT void setMinimumDOMTimerInterval(Seconds); // Initialized to DOMTimer::defaultMinimumInterval().
     Seconds minimumDOMTimerInterval() const { return m_minimumDOMTimerInterval; }
 
     WEBCORE_EXPORT void setLayoutInterval(Seconds);
     Seconds layoutInterval() const { return m_layoutInterval; }
+
+#if ENABLE(TEXT_AUTOSIZING)
+    float oneLineTextMultiplierCoefficient() const { return m_oneLineTextMultiplierCoefficient; }
+    float multiLineTextMultiplierCoefficient() const { return m_multiLineTextMultiplierCoefficient; }
+    float maxTextAutosizingScaleIncrease() const { return m_maxTextAutosizingScaleIncrease; }
+#endif
 
     WEBCORE_EXPORT static const String& defaultMediaContentTypesRequiringHardwareSupport();
     WEBCORE_EXPORT void setMediaContentTypesRequiringHardwareSupport(const Vector<ContentType>&);
@@ -160,12 +182,12 @@ protected:
 
     // Helpers used by generated Settings.cpp.
     void setNeedsRecalcStyleInAllFrames();
+    void setNeedsRelayoutAllFrames();
     void mediaTypeOverrideChanged();
     void imagesEnabledChanged();
-    void scriptEnabledChanged();
     void pluginsEnabledChanged();
     void userStyleSheetLocationChanged();
-    void usesPageCacheChanged();
+    void usesBackForwardCacheChanged();
     void dnsPrefetchingEnabledChanged();
     void storageBlockingPolicyChanged();
     void backgroundShouldExtendBeyondPageChanged();
@@ -173,6 +195,13 @@ protected:
     void hiddenPageDOMTimerThrottlingStateChanged();
     void hiddenPageCSSAnimationSuspensionEnabledChanged();
     void resourceUsageOverlayVisibleChanged();
+    void iceCandidateFilteringEnabledChanged();
+#if ENABLE(TEXT_AUTOSIZING)
+    void shouldEnableTextAutosizingBoostChanged();
+#endif
+#if ENABLE(MEDIA_STREAM)
+    void mockCaptureDevicesEnabledChanged();
+#endif
 
     Page* m_page;
 
@@ -183,6 +212,12 @@ protected:
     Timer m_setImageLoadingSettingsTimer;
 
     Vector<ContentType> m_mediaContentTypesRequiringHardwareSupport;
+
+#if ENABLE(TEXT_AUTOSIZING)
+    float m_oneLineTextMultiplierCoefficient { defaultOneLineTextMultiplierCoefficient };
+    float m_multiLineTextMultiplierCoefficient { defaultMultiLineTextMultiplierCoefficient };
+    float m_maxTextAutosizingScaleIncrease { defaultMaxTextAutosizingScaleIncrease };
+#endif
 };
 
 } // namespace WebCore

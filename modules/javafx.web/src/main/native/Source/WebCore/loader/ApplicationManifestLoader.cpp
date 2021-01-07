@@ -32,6 +32,7 @@
 #include "CachedResourceLoader.h"
 #include "CachedResourceRequest.h"
 #include "CachedResourceRequestInitiators.h"
+#include "CustomHeaderFields.h"
 #include "DocumentLoader.h"
 #include "Frame.h"
 
@@ -66,7 +67,19 @@ bool ApplicationManifestLoader::startLoading()
 #endif
 
     auto credentials = m_useCredentials ? FetchOptions::Credentials::Include : FetchOptions::Credentials::Omit;
-    auto options = ResourceLoaderOptions(SendCallbacks, SniffContent, BufferData, StoredCredentialsPolicy::DoNotUse, ClientCredentialPolicy::CannotAskClientForCredentials, credentials, DoSecurityCheck, FetchOptions::Mode::NoCors, DoNotIncludeCertificateInfo, ContentSecurityPolicyImposition::DoPolicyCheck, DefersLoadingPolicy::AllowDefersLoading, CachingPolicy::AllowCaching);
+    auto options = ResourceLoaderOptions(
+        SendCallbackPolicy::SendCallbacks,
+        ContentSniffingPolicy::SniffContent,
+        DataBufferingPolicy::BufferData,
+        StoredCredentialsPolicy::DoNotUse,
+        ClientCredentialPolicy::CannotAskClientForCredentials,
+        credentials,
+        SecurityCheckPolicy::DoSecurityCheck,
+        FetchOptions::Mode::NoCors,
+        CertificateInfoPolicy::DoNotIncludeCertificateInfo,
+        ContentSecurityPolicyImposition::DoPolicyCheck,
+        DefersLoadingPolicy::AllowDefersLoading,
+        CachingPolicy::AllowCaching);
     options.destination = FetchOptions::Destination::Manifest;
     CachedResourceRequest request(WTFMove(resourceRequest), options);
 
@@ -90,7 +103,7 @@ void ApplicationManifestLoader::stopLoading()
     }
 }
 
-std::optional<ApplicationManifest>& ApplicationManifestLoader::processManifest()
+Optional<ApplicationManifest>& ApplicationManifestLoader::processManifest()
 {
     if (!m_processedManifest && m_resource) {
         auto manifestURL = m_url;

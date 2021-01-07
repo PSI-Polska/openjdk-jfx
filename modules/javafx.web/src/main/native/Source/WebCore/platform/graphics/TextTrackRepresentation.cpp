@@ -42,11 +42,11 @@ public:
     IntRect bounds() const override { return IntRect(); }
 };
 
-#if !(PLATFORM(IOS) || (PLATFORM(MAC) && ENABLE(VIDEO_PRESENTATION_MODE)))
+#if !(PLATFORM(IOS_FAMILY) || (PLATFORM(MAC) && ENABLE(VIDEO_PRESENTATION_MODE)))
 
 std::unique_ptr<TextTrackRepresentation> TextTrackRepresentation::create(TextTrackRepresentationClient&)
 {
-    return std::make_unique<NullTextTrackRepresentation>();
+    return makeUnique<NullTextTrackRepresentation>();
 }
 
 #endif

@@ -39,7 +39,7 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-ApplyBlockElementCommand::ApplyBlockElementCommand(Document& document, const QualifiedName& tagName, const AtomicString& inlineStyle)
+ApplyBlockElementCommand::ApplyBlockElementCommand(Document& document, const QualifiedName& tagName, const AtomString& inlineStyle)
     : CompositeEditCommand(document)
     , m_tagName(tagName)
     , m_inlineStyle(inlineStyle)
@@ -238,7 +238,7 @@ void ApplyBlockElementCommand::rangeForParagraphSplittingTextNodesIfNeeded(const
         }
 
         // If end is in the middle of a text node and the text node is editable, split.
-        if (endStyle->userModify() != READ_ONLY && !endStyle->collapseWhiteSpace() && end.offsetInContainerNode() && end.offsetInContainerNode() < end.containerNode()->maxCharacterOffset()) {
+        if (endStyle->userModify() != UserModify::ReadOnly && !endStyle->collapseWhiteSpace() && end.offsetInContainerNode() && end.offsetInContainerNode() < end.containerNode()->maxCharacterOffset()) {
             RefPtr<Text> endContainer = end.containerText();
             splitTextNode(*endContainer, end.offsetInContainerNode());
             if (isStartAndEndOnSameNode)

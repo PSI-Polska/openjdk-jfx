@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2004-2018 Apple Inc. All rights reserved.
  * Copyright (C) 2010 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -30,7 +30,6 @@
 #include "File.h"
 #include "FileList.h"
 #include "FileListCreator.h"
-#include "FileSystem.h"
 #include "FormController.h"
 #include "Frame.h"
 #include "HTMLInputElement.h"
@@ -43,6 +42,8 @@
 #include "Settings.h"
 #include "ShadowRoot.h"
 #include "UserGestureIndicator.h"
+#include <wtf/FileSystem.h>
+#include <wtf/IsoMallocInlines.h>
 #include <wtf/TypeCasts.h>
 #include <wtf/text/StringBuilder.h>
 
@@ -60,6 +61,7 @@ namespace WebCore {
 using namespace HTMLNames;
 
 class UploadButtonElement final : public HTMLInputElement {
+    WTF_MAKE_ISO_ALLOCATED_INLINE(UploadButtonElement);
 public:
     static Ref<UploadButtonElement> create(Document&);
     static Ref<UploadButtonElement> createForMultiple(Document&);
@@ -87,8 +89,8 @@ Ref<UploadButtonElement> UploadButtonElement::createForMultiple(Document& docume
 UploadButtonElement::UploadButtonElement(Document& document)
     : HTMLInputElement(inputTag, document, 0, false)
 {
-    setType(AtomicString("button", AtomicString::ConstructFromLiteral));
-    setPseudo(AtomicString("-webkit-file-upload-button", AtomicString::ConstructFromLiteral));
+    setType(AtomString("button", AtomString::ConstructFromLiteral));
+    setPseudo(AtomString("-webkit-file-upload-button", AtomString::ConstructFromLiteral));
 }
 
 FileInputType::FileInputType(HTMLInputElement& element)
@@ -123,7 +125,7 @@ Vector<FileChooserFileInfo> FileInputType::filesFromFormControlState(const FormC
     return files;
 }
 
-const AtomicString& FileInputType::formControlType() const
+const AtomString& FileInputType::formControlType() const
 {
     return InputTypeNames::file();
 }
@@ -286,7 +288,7 @@ void FileInputType::createShadowSubtree()
     element()->userAgentShadowRoot()->appendChild(element()->multiple() ? UploadButtonElement::createForMultiple(element()->document()): UploadButtonElement::create(element()->document()));
 }
 
-void FileInputType::disabledAttributeChanged()
+void FileInputType::disabledStateChanged()
 {
     ASSERT(element());
     ASSERT(element()->shadowRoot());
@@ -299,15 +301,18 @@ void FileInputType::disabledAttributeChanged()
         button->setBooleanAttribute(disabledAttr, element()->isDisabledFormControl());
 }
 
-void FileInputType::multipleAttributeChanged()
+void FileInputType::attributeChanged(const QualifiedName& name)
 {
-    if (auto* element = this->element()) {
-        ASSERT(element->shadowRoot());
-        if (auto root = element->userAgentShadowRoot()) {
-    if (auto button = makeRefPtr(childrenOfType<UploadButtonElement>(*root).first()))
-                button->setValue(element->multiple() ? fileButtonChooseMultipleFilesLabel() : fileButtonChooseFileLabel());
+    if (name == multipleAttr) {
+        if (auto* element = this->element()) {
+            ASSERT(element->shadowRoot());
+            if (auto root = element->userAgentShadowRoot()) {
+                if (auto button = makeRefPtr(childrenOfType<UploadButtonElement>(*root).first()))
+                    button->setValue(element->multiple() ? fileButtonChooseMultipleFilesLabel() : fileButtonChooseFileLabel());
+            }
         }
     }
+    BaseClickableWithKeyInputType::attributeChanged(name);
 }
 
 void FileInputType::requestIcon(const Vector<String>& paths)
@@ -327,7 +332,7 @@ void FileInputType::requestIcon(const Vector<String>& paths)
         m_fileIconLoader->invalidate();
 
     FileIconLoaderClient& client = *this;
-    m_fileIconLoader = std::make_unique<FileIconLoader>(client);
+    m_fileIconLoader = makeUnique<FileIconLoader>(client);
 
     chrome->loadIconForFiles(paths, *m_fileIconLoader);
 }
@@ -394,6 +399,7 @@ void FileInputType::setFiles(RefPtr<FileList>&& files, RequestIcon shouldRequest
     if (pathsChanged) {
         // This call may cause destruction of this instance.
         // input instance is safe since it is ref-counted.
+        protectedInputElement->dispatchInputEvent();
         protectedInputElement->dispatchChangeEvent();
     }
     protectedInputElement->setChangedSinceLastFormControlChangeEvent(false);
@@ -414,7 +420,7 @@ void FileInputType::filesChosen(const Vector<FileChooserFileInfo>& paths, const 
         m_fileListCreator = nullptr;
     });
 
-    if (icon)
+    if (icon && !m_fileList->isEmpty())
         iconLoaded(icon);
 }
 

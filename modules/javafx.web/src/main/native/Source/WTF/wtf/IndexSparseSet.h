@@ -23,10 +23,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IndexSparseSet_h
-#define IndexSparseSet_h
+#pragma once
 
-#include <wtf/HashTraits.h>
 #include <wtf/Vector.h>
 
 namespace WTF {
@@ -75,6 +73,7 @@ struct DefaultIndexSparseSetTraits<KeyValuePair<KeyType, ValueType>> {
 
 template<typename EntryType = unsigned, typename EntryTypeTraits = DefaultIndexSparseSetTraits<EntryType>, typename OverflowHandler = CrashOnOverflow>
 class IndexSparseSet {
+    WTF_MAKE_FAST_ALLOCATED;
     typedef Vector<EntryType, 0, OverflowHandler> ValueList;
 public:
     explicit IndexSparseSet(unsigned size);
@@ -231,5 +230,3 @@ auto IndexSparseSet<EntryType, EntryTypeTraits, OverflowHandler>::end() const ->
 
 using WTF::DefaultIndexSparseSetTraits;
 using WTF::IndexSparseSet;
-
-#endif // IndexSparseSet_h

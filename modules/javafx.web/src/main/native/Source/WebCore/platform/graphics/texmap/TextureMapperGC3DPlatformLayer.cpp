@@ -20,7 +20,7 @@
 #include "config.h"
 #include "TextureMapperGC3DPlatformLayer.h"
 
-#if ENABLE(GRAPHICS_CONTEXT_3D) && USE(TEXTURE_MAPPER)
+#if ENABLE(GRAPHICS_CONTEXT_GL) && USE(TEXTURE_MAPPER) && !USE(NICOSIA)
 
 #include "BitmapTextureGL.h"
 #include "GLContext.h"
@@ -30,26 +30,26 @@
 
 namespace WebCore {
 
-TextureMapperGC3DPlatformLayer::TextureMapperGC3DPlatformLayer(GraphicsContext3D& context, GraphicsContext3D::RenderStyle renderStyle)
+TextureMapperGC3DPlatformLayer::TextureMapperGC3DPlatformLayer(GraphicsContextGLOpenGL& context, GraphicsContextGLOpenGL::Destination destination)
     : m_context(context)
 {
-    switch (renderStyle) {
-    case GraphicsContext3D::RenderOffscreen:
+    switch (destination) {
+    case GraphicsContextGLOpenGL::Destination::Offscreen:
         m_glContext = GLContext::createOffscreenContext(&PlatformDisplay::sharedDisplayForCompositing());
         break;
-    case GraphicsContext3D::RenderDirectlyToHostWindow:
+    case GraphicsContextGLOpenGL::Destination::DirectlyToHostWindow:
         ASSERT_NOT_REACHED();
         break;
     }
 
-#if USE(COORDINATED_GRAPHICS_THREADED)
+#if USE(COORDINATED_GRAPHICS)
     m_platformLayerProxy = adoptRef(new TextureMapperPlatformLayerProxy());
 #endif
 }
 
 TextureMapperGC3DPlatformLayer::~TextureMapperGC3DPlatformLayer()
 {
-#if !USE(COORDINATED_GRAPHICS_THREADED)
+#if !USE(COORDINATED_GRAPHICS)
     if (client())
         client()->platformLayerWillBeDestroyed();
 #endif
@@ -61,13 +61,13 @@ bool TextureMapperGC3DPlatformLayer::makeContextCurrent()
     return m_glContext->makeContextCurrent();
 }
 
-PlatformGraphicsContext3D TextureMapperGC3DPlatformLayer::platformContext()
+PlatformGraphicsContextGL TextureMapperGC3DPlatformLayer::platformContext() const
 {
     ASSERT(m_glContext);
     return m_glContext->platformContext();
 }
 
-#if USE(COORDINATED_GRAPHICS_THREADED)
+#if USE(COORDINATED_GRAPHICS)
 RefPtr<TextureMapperPlatformLayerProxy> TextureMapperGC3DPlatformLayer::proxy() const
 {
     return m_platformLayerProxy.copyRef();
@@ -84,7 +84,7 @@ void TextureMapperGC3DPlatformLayer::swapBuffersIfNeeded()
 
     {
         LockHolder holder(m_platformLayerProxy->lock());
-        m_platformLayerProxy->pushNextBuffer(std::make_unique<TextureMapperPlatformLayerBuffer>(m_context.m_compositorTexture, textureSize, flags, m_context.m_internalColorFormat));
+        m_platformLayerProxy->pushNextBuffer(makeUnique<TextureMapperPlatformLayerBuffer>(m_context.m_compositorTexture, textureSize, flags, m_context.m_internalColorFormat));
     }
 
     m_context.markLayerComposited();
@@ -97,26 +97,27 @@ void TextureMapperGC3DPlatformLayer::paintToTextureMapper(TextureMapper& texture
     m_context.markLayerComposited();
 
 #if USE(TEXTURE_MAPPER_GL)
-    if (m_context.m_attrs.antialias && m_context.m_state.boundFBO == m_context.m_multisampleFBO) {
+    auto attrs = m_context.contextAttributes();
+    if (attrs.antialias && m_context.m_state.boundFBO == m_context.m_multisampleFBO) {
         GLContext* previousActiveContext = GLContext::current();
         if (previousActiveContext != m_glContext.get())
             m_context.makeContextCurrent();
 
         m_context.resolveMultisamplingIfNecessary();
-        ::glBindFramebuffer(GraphicsContext3D::FRAMEBUFFER, m_context.m_state.boundFBO);
+        ::glBindFramebuffer(GraphicsContextGLOpenGL::FRAMEBUFFER, m_context.m_state.boundFBO);
 
         if (previousActiveContext && previousActiveContext != m_glContext.get())
             previousActiveContext->makeContextCurrent();
     }
 
     TextureMapperGL& texmapGL = static_cast<TextureMapperGL&>(textureMapper);
-    TextureMapperGL::Flags flags = TextureMapperGL::ShouldFlipTexture | (m_context.m_attrs.alpha ? TextureMapperGL::ShouldBlend : 0);
+    TextureMapperGL::Flags flags = TextureMapperGL::ShouldFlipTexture | (attrs.alpha ? TextureMapperGL::ShouldBlend : 0);
     IntSize textureSize(m_context.m_currentWidth, m_context.m_currentHeight);
     texmapGL.drawTexture(m_context.m_texture, flags, textureSize, targetRect, matrix, opacity);
 #endif // USE(TEXTURE_MAPPER_GL)
 }
-#endif // USE(COORDINATED_GRAPHICS_THREADED)
+#endif // USE(COORDINATED_GRAPHICS)
 
 } // namespace WebCore
 
-#endif // ENABLE(GRAPHICS_CONTEXT_3D) && USE(TEXTURE_MAPPER)
+#endif // ENABLE(GRAPHICS_CONTEXT_GL) && USE(TEXTURE_MAPPER)

@@ -31,6 +31,7 @@
 namespace WebCore {
 
 class Position;
+class StaticRange;
 
 const EAffinity SEL_DEFAULT_AFFINITY = DOWNSTREAM;
 enum SelectionDirection : uint8_t { DirectionForward, DirectionBackward, DirectionRight, DirectionLeft };
@@ -45,6 +46,7 @@ public:
     VisibleSelection(const Position&, const Position&, EAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
 
     WEBCORE_EXPORT VisibleSelection(const Range&, EAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
+    WEBCORE_EXPORT VisibleSelection(const StaticRange&, EAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
 
     WEBCORE_EXPORT VisibleSelection(const VisiblePosition&, bool isDirectional = false);
     WEBCORE_EXPORT VisibleSelection(const VisiblePosition&, const VisiblePosition&, bool isDirectional = false);
@@ -105,6 +107,9 @@ public:
     Node* nonBoundaryShadowTreeRootNode() const;
 
     WEBCORE_EXPORT bool isInPasswordField() const;
+
+    WEBCORE_EXPORT static Position adjustPositionForEnd(const Position& currentPosition, Node* startContainerNode);
+    WEBCORE_EXPORT static Position adjustPositionForStart(const Position& currentPosition, Node* startContainerNode);
 
 #if ENABLE(TREE_DEBUGGING)
     void debugPosition() const;

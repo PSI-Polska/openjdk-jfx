@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,13 +29,13 @@
 
 namespace JSC {
 
-class InspectorInstrumentationObject : public JSNonFinalObject {
+class InspectorInstrumentationObject final : public JSNonFinalObject {
 private:
     InspectorInstrumentationObject(VM&, Structure*);
 
 public:
     typedef JSNonFinalObject Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
     static InspectorInstrumentationObject* create(VM& vm, JSGlobalObject* globalObject, Structure* structure)
     {

@@ -33,13 +33,13 @@
 #include "B3MemoryValue.h"
 #include "B3PatchpointValue.h"
 #include "B3ValueInlines.h"
+#include "DateInstance.h"
 #include "DirectArguments.h"
 #include "FTLState.h"
 #include "GetterSetter.h"
 #include "JSPropertyNameEnumerator.h"
 #include "JSScope.h"
 #include "JSCInlines.h"
-#include "RegExpConstructor.h"
 #include "RegExpObject.h"
 #include "ScopedArguments.h"
 #include "ScopedArgumentsTable.h"
@@ -70,6 +70,8 @@ AbstractHeapRepository::AbstractHeapRepository()
     FOR_EACH_NUMBERED_ABSTRACT_HEAP(NUMBERED_ABSTRACT_HEAP_INITIALIZATION)
 #undef NUMBERED_ABSTRACT_HEAP_INITIALIZATION
 
+    , JSString_value(JSRopeString_fiber0)
+
     , absolute(&root, "absolute")
 {
     // Make sure that our explicit assumptions about the StructureIDBlob match reality.
@@ -84,6 +86,8 @@ AbstractHeapRepository::AbstractHeapRepository()
     JSCell_typeInfoType.changeParent(&JSCell_usefulBytes);
     JSCell_typeInfoFlags.changeParent(&JSCell_usefulBytes);
     JSCell_cellState.changeParent(&JSCell_usefulBytes);
+    JSRopeString_flags.changeParent(&JSRopeString_fiber0);
+    JSRopeString_length.changeParent(&JSRopeString_fiber1);
 
     RELEASE_ASSERT(!JSCell_freeListNext.offset());
 }

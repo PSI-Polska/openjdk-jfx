@@ -54,14 +54,17 @@ RefPtr<HTMLElement> InsertListCommand::insertList(Document& document, Type type)
     return insertCommand->m_listElement;
 }
 
-HTMLElement& InsertListCommand::fixOrphanedListChild(Node& node)
+HTMLElement* InsertListCommand::fixOrphanedListChild(Node& node)
 {
     auto listElement = HTMLUListElement::create(document());
     insertNodeBefore(listElement.copyRef(), node);
+    if (!listElement->hasEditableStyle())
+        return nullptr;
+
     removeNode(node);
     appendNode(node, listElement.copyRef());
     m_listElement = WTFMove(listElement);
-    return *m_listElement;
+    return m_listElement.get();
 }
 
 Ref<HTMLElement> InsertListCommand::mergeWithNeighboringLists(HTMLElement& list)
@@ -128,7 +131,7 @@ void InsertListCommand::doApply()
             return;
     }
 
-    auto& listTag = (m_type == OrderedList) ? olTag : ulTag;
+    auto& listTag = (m_type == Type::OrderedList) ? olTag : ulTag;
     if (endingSelection().isRange()) {
         VisibleSelection selection = selectionForParagraphIteration(endingSelection());
         ASSERT(selection.isRange());
@@ -192,7 +195,7 @@ void InsertListCommand::doApply()
 
 EditAction InsertListCommand::editingAction() const
 {
-    return m_type == OrderedList ? EditActionInsertOrderedList : EditActionInsertUnorderedList;
+    return m_type == Type::OrderedList ? EditAction::InsertOrderedList : EditAction::InsertUnorderedList;
 }
 
 void InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HTMLQualifiedName& listTag, Range* currentSelection)
@@ -206,8 +209,13 @@ void InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
     if (listChildNode) {
         // Remove the list chlild.
         RefPtr<HTMLElement> listNode = enclosingList(listChildNode);
-        if (!listNode)
-            listNode = mergeWithNeighboringLists(fixOrphanedListChild(*listChildNode));
+        if (!listNode) {
+            RefPtr<HTMLElement> listElement = fixOrphanedListChild(*listChildNode);
+            if (!listElement)
+                return;
+
+            listNode = mergeWithNeighboringLists(*listElement);
+        }
 
         if (!listNode->hasTagName(listTag)) {
             // listChildNode will be removed from the list and a list of type m_type will be created.
@@ -225,6 +233,8 @@ void InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
 
             RefPtr<HTMLElement> newList = createHTMLElement(document(), listTag);
             insertNodeBefore(*newList, *listNode);
+            if (!newList->hasEditableStyle())
+                return;
 
             auto* firstChildInList = enclosingListChild(VisiblePosition(firstPositionInNode(listNode.get())).deepEquivalent().deprecatedNode(), listNode.get());
             Node* outerBlock = firstChildInList && isBlockFlowElement(*firstChildInList) ? firstChildInList : listNode.get();
@@ -338,7 +348,7 @@ RefPtr<HTMLElement> InsertListCommand::listifyParagraph(const VisiblePosition& o
     VisiblePosition start = startOfParagraph(originalStart, CanSkipOverEditingBoundary);
     VisiblePosition end = endOfParagraph(start, CanSkipOverEditingBoundary);
 
-    if (start.isNull() || end.isNull())
+    if (start.isNull() || end.isNull() || !start.deepEquivalent().containerNode()->hasEditableStyle() || !end.deepEquivalent().containerNode()->hasEditableStyle())
         return 0;
 
     // Check for adjoining lists.

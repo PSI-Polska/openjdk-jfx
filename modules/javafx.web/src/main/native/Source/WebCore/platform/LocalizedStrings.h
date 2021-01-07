@@ -68,7 +68,7 @@ namespace WebCore {
     String contextMenuItemTagStop();
     String contextMenuItemTagReload();
     String contextMenuItemTagCut();
-    String contextMenuItemTagPaste();
+    WEBCORE_EXPORT String contextMenuItemTagPaste();
 #if PLATFORM(GTK)
     String contextMenuItemTagDelete();
     String contextMenuItemTagInputMethods();
@@ -83,9 +83,8 @@ namespace WebCore {
     String contextMenuItemTagUnicodeInsertZWSMark();
     String contextMenuItemTagUnicodeInsertZWJMark();
     String contextMenuItemTagUnicodeInsertZWNJMark();
-#endif
-#if PLATFORM(GTK)
     String contextMenuItemTagSelectAll();
+    String contextMenuItemTagInsertEmoji();
 #endif
     String contextMenuItemTagNoGuessesFound();
     String contextMenuItemTagIgnoreSpelling();
@@ -153,7 +152,7 @@ namespace WebCore {
     WEBCORE_EXPORT String contextMenuItemTagInspectElement();
 #endif // ENABLE(CONTEXT_MENUS)
 
-#if !PLATFORM(IOS)
+#if !PLATFORM(IOS_FAMILY)
     String searchMenuNoRecentSearchesText();
     String searchMenuRecentSearchesText();
     String searchMenuClearRecentSearchesText();
@@ -164,6 +163,7 @@ namespace WebCore {
     String AXListMarkerText();
     String AXImageMapText();
     String AXHeadingText();
+    String AXColorWellText();
     String AXDefinitionText();
     String AXDescriptionListText();
     String AXDescriptionListTermText();
@@ -186,6 +186,9 @@ namespace WebCore {
     String AXMonthFieldText();
     String AXNumberFieldText();
     String AXWeekFieldText();
+    String AXARIAContentGroupText(const String& ariaType);
+    String AXHorizontalRuleDescriptionText();
+    String AXMarkText();
 
     String AXButtonActionVerb();
     String AXRadioButtonActionVerb();
@@ -203,28 +206,36 @@ namespace WebCore {
     String weekFormatInLDML();
 #endif
 #if PLATFORM(COCOA)
-    String AXARIAContentGroupText(const String& ariaType);
-    String AXHorizontalRuleDescriptionText();
-    String AXMarkText();
 #if ENABLE(METER_ELEMENT)
     String AXMeterGaugeRegionOptimumText();
     String AXMeterGaugeRegionSuboptimalText();
     String AXMeterGaugeRegionLessGoodText();
 #endif
 #endif
+#if ENABLE(APPLE_PAY)
+    String AXApplePayPlainLabel();
+    String AXApplePayBuyLabel();
+    String AXApplePaySetupLabel();
+    String AXApplePayDonateLabel();
+    String AXApplePayCheckOutLabel();
+    String AXApplePayBookLabel();
+    String AXApplePaySubscribeLabel();
+#endif
 
     String AXAutoFillCredentialsLabel();
     String AXAutoFillContactsLabel();
     String AXAutoFillStrongPasswordLabel();
-    String AXAutoFillStrongConfirmationPasswordLabel();
+    String AXAutoFillCreditCardLabel();
     String autoFillStrongPasswordLabel();
 
     String missingPluginText();
     String crashedPluginText();
     String blockedPluginByContentSecurityPolicyText();
     String insecurePluginVersionText();
+    String unsupportedPluginText();
+    WEBCORE_EXPORT String pluginTooSmallText();
 
-    String multipleFileUploadText(unsigned numberOfFiles);
+    WEBCORE_EXPORT String multipleFileUploadText(unsigned numberOfFiles);
     String unknownFileSizeText();
 
 #if PLATFORM(WIN)
@@ -237,10 +248,10 @@ namespace WebCore {
     WEBCORE_EXPORT String pdfDocumentTypeDescription();
     WEBCORE_EXPORT String postScriptDocumentTypeDescription();
     String keygenMenuItem2048();
-    String keygenKeychainItemName(const String& host);
+    WEBCORE_EXPORT String keygenKeychainItemName(const String& host);
 #endif
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     String htmlSelectMultipleItems(size_t num);
     String fileButtonChooseMediaFileLabel();
     String fileButtonChooseMultipleMediaFilesLabel();
@@ -301,7 +312,7 @@ namespace WebCore {
 
     WEBCORE_EXPORT String useBlockedPlugInContextMenuTitle();
 
-#if ENABLE(SUBTLE_CRYPTO)
+#if ENABLE(WEB_CRYPTO)
     String webCryptoMasterKeyKeychainLabel(const String& localizedApplicationName);
     String webCryptoMasterKeyKeychainComment();
 #endif
@@ -315,14 +326,17 @@ namespace WebCore {
     WEBCORE_EXPORT String exitFullScreenButtonAccessibilityTitle();
 #endif
 
-#if ENABLE(EXTRA_ZOOM_MODE)
+#if PLATFORM(WATCHOS)
+    WEBCORE_EXPORT String numberPadOKButtonTitle();
     WEBCORE_EXPORT String formControlCancelButtonTitle();
-    WEBCORE_EXPORT String formControlSubmitButtonTitle();
+    WEBCORE_EXPORT String formControlDoneButtonTitle();
     WEBCORE_EXPORT String formControlHideButtonTitle();
     WEBCORE_EXPORT String formControlGoButtonTitle();
     WEBCORE_EXPORT String formControlSearchButtonTitle();
-    WEBCORE_EXPORT String textInputModeWriteButton();
-    WEBCORE_EXPORT String textInputModeSpeechButton();
+    WEBCORE_EXPORT String datePickerSetButtonTitle();
+    WEBCORE_EXPORT String datePickerDayLabelTitle();
+    WEBCORE_EXPORT String datePickerMonthLabelTitle();
+    WEBCORE_EXPORT String datePickerYearLabelTitle();
 #endif
 
 #if USE(GLIB) && defined(GETTEXT_PACKAGE)

@@ -44,27 +44,27 @@
 
 namespace WebCore {
 
-const AtomicString& MediaControlsHost::automaticKeyword()
+const AtomString& MediaControlsHost::automaticKeyword()
 {
-    static NeverDestroyed<const AtomicString> automatic("automatic", AtomicString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> automatic("automatic", AtomString::ConstructFromLiteral);
     return automatic;
 }
 
-const AtomicString& MediaControlsHost::forcedOnlyKeyword()
+const AtomString& MediaControlsHost::forcedOnlyKeyword()
 {
-    static NeverDestroyed<const AtomicString> forcedOn("forced-only", AtomicString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> forcedOn("forced-only", AtomString::ConstructFromLiteral);
     return forcedOn;
 }
 
-const AtomicString& MediaControlsHost::alwaysOnKeyword()
+const AtomString& MediaControlsHost::alwaysOnKeyword()
 {
-    static NeverDestroyed<const AtomicString> alwaysOn("always-on", AtomicString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> alwaysOn("always-on", AtomString::ConstructFromLiteral);
     return alwaysOn;
 }
 
-const AtomicString& MediaControlsHost::manualKeyword()
+const AtomString& MediaControlsHost::manualKeyword()
 {
-    static NeverDestroyed<const AtomicString> alwaysOn("manual", AtomicString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> alwaysOn("manual", AtomString::ConstructFromLiteral);
     return alwaysOn;
 }
 
@@ -100,7 +100,7 @@ Vector<RefPtr<AudioTrack>> MediaControlsHost::sortedTrackListForMenu(AudioTrackL
     return page->group().captionPreferences().sortedTrackListForMenu(&trackList);
 }
 
-String MediaControlsHost::displayNameForTrack(const std::optional<TextOrAudioTrack>& track)
+String MediaControlsHost::displayNameForTrack(const Optional<TextOrAudioTrack>& track)
 {
     if (!track)
         return emptyString();
@@ -124,7 +124,7 @@ TextTrack* MediaControlsHost::captionMenuAutomaticItem()
     return TextTrack::captionMenuAutomaticItem();
 }
 
-AtomicString MediaControlsHost::captionDisplayMode() const
+AtomString MediaControlsHost::captionDisplayMode() const
 {
     Page* page = m_mediaElement->document().page();
     if (!page)
@@ -177,15 +177,15 @@ void MediaControlsHost::exitedFullscreen()
         m_textTrackContainer->exitedFullscreen();
 }
 
-void MediaControlsHost::updateCaptionDisplaySizes()
+void MediaControlsHost::updateCaptionDisplaySizes(ForceUpdate force)
 {
     if (m_textTrackContainer)
-        m_textTrackContainer->updateSizes(true);
+        m_textTrackContainer->updateSizes(force == ForceUpdate::Yes ? MediaControlTextTrackContainerElement::ForceUpdate::Yes : MediaControlTextTrackContainerElement::ForceUpdate::No);
 }
 
 bool MediaControlsHost::allowsInlineMediaPlayback() const
 {
-    return !m_mediaElement->mediaSession().requiresFullscreenForVideoPlayback(*m_mediaElement);
+    return !m_mediaElement->mediaSession().requiresFullscreenForVideoPlayback();
 }
 
 bool MediaControlsHost::supportsFullscreen() const
@@ -210,7 +210,7 @@ void MediaControlsHost::setPreparedToReturnVideoLayerToInline(bool value)
 
 bool MediaControlsHost::userGestureRequired() const
 {
-    return !m_mediaElement->mediaSession().playbackPermitted(*m_mediaElement);
+    return !m_mediaElement->mediaSession().playbackPermitted();
 }
 
 bool MediaControlsHost::shouldForceControlsDisplay() const
@@ -283,13 +283,24 @@ String MediaControlsHost::shadowRootCSSText() const
 
 String MediaControlsHost::base64StringForIconNameAndType(const String& iconName, const String& iconType) const
 {
-
     return RenderTheme::singleton().mediaControlsBase64StringForIconNameAndType(iconName, iconType);
 }
 
 String MediaControlsHost::formattedStringForDuration(double durationInSeconds) const
 {
     return RenderTheme::singleton().mediaControlsFormattedStringForDuration(durationInSeconds);
+}
+
+bool MediaControlsHost::compactMode() const
+{
+    if (m_simulateCompactMode)
+        return true;
+
+#if PLATFORM(WATCHOS)
+    return true;
+#else
+    return false;
+#endif
 }
 
 }

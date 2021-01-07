@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2015 Andy VanWagoner (thetalecrafter@gmail.com)
+ * Copyright (C) 2015 Andy VanWagoner (andy@vanwagoner.family)
+ * Copyright (C) 2018-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,33 +29,32 @@
 #if ENABLE(INTL)
 
 #include "InternalFunction.h"
+#include "IntlObject.h"
 
 namespace JSC {
 
 class IntlCollator;
 class IntlCollatorPrototype;
 
-class IntlCollatorConstructor : public InternalFunction {
+class IntlCollatorConstructor final : public InternalFunction {
 public:
     typedef InternalFunction Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
-    static IntlCollatorConstructor* create(VM&, Structure*, IntlCollatorPrototype*, Structure*);
+    static IntlCollatorConstructor* create(VM&, Structure*, IntlCollatorPrototype*);
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue);
 
     DECLARE_INFO;
 
-    Structure* collatorStructure() const { return m_collatorStructure.get(); }
+    Structure* collatorStructure(VM&) const { return globalObject()->collatorStructure(); }
 
 protected:
-    void finishCreation(VM&, IntlCollatorPrototype*, Structure*);
+    void finishCreation(VM&, IntlCollatorPrototype*);
 
 private:
     IntlCollatorConstructor(VM&, Structure*);
-    static void visitChildren(JSCell*, SlotVisitor&);
-
-    WriteBarrier<Structure> m_collatorStructure;
 };
+STATIC_ASSERT_ISO_SUBSPACE_SHARABLE(IntlCollatorConstructor, InternalFunction);
 
 } // namespace JSC
 

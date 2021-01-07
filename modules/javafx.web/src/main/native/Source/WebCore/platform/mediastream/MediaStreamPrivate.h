@@ -2,7 +2,7 @@
  * Copyright (C) 2011, 2015 Ericsson AB. All rights reserved.
  * Copyright (C) 2012 Google Inc. All rights reserved.
  * Copyright (C) 2013 Nokia Corporation and/or its subsidiary(-ies).
- * Copyright (C) 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,23 +37,26 @@
 #if ENABLE(MEDIA_STREAM)
 
 #include "FloatSize.h"
-#include "MediaStreamTrack.h"
 #include "MediaStreamTrackPrivate.h"
 #include <wtf/Function.h>
 #include <wtf/HashMap.h>
 #include <wtf/MediaTime.h>
-#include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 #include <wtf/UUID.h>
 #include <wtf/Vector.h>
-#include <wtf/WeakPtr.h>
 
 namespace WebCore {
 
 class MediaStream;
 class OrientationNotifier;
 
-class MediaStreamPrivate : public MediaStreamTrackPrivate::Observer, public RefCounted<MediaStreamPrivate> {
+class MediaStreamPrivate final
+    : public MediaStreamTrackPrivate::Observer
+    , public RefCounted<MediaStreamPrivate>
+#if !RELEASE_LOG_DISABLED
+    , private LoggerHelper
+#endif
+{
 public:
     class Observer {
     public:
@@ -65,8 +68,9 @@ public:
         virtual void didRemoveTrack(MediaStreamTrackPrivate&) { }
     };
 
-    static Ref<MediaStreamPrivate> create(const Vector<Ref<RealtimeMediaSource>>& audioSources, const Vector<Ref<RealtimeMediaSource>>& videoSources);
-    static Ref<MediaStreamPrivate> create(const MediaStreamTrackPrivateVector& tracks, String&& id = createCanonicalUUIDString()) { return adoptRef(*new MediaStreamPrivate(tracks, WTFMove(id))); }
+    static Ref<MediaStreamPrivate> create(Ref<const Logger>&&, Ref<RealtimeMediaSource>&&);
+    static Ref<MediaStreamPrivate> create(Ref<const Logger>&&, const Vector<Ref<RealtimeMediaSource>>& audioSources, const Vector<Ref<RealtimeMediaSource>>& videoSources);
+    static Ref<MediaStreamPrivate> create(Ref<const Logger>&& logger, const MediaStreamTrackPrivateVector& tracks, String&& id = createCanonicalUUIDString()) { return adoptRef(*new MediaStreamPrivate(WTFMove(logger), tracks, WTFMove(id))); }
 
     virtual ~MediaStreamPrivate();
 
@@ -77,7 +81,7 @@ public:
 
     String id() const { return m_id; }
 
-    MediaStreamTrackPrivateVector tracks() const;
+    WEBCORE_EXPORT MediaStreamTrackPrivateVector tracks() const;
     MediaStreamTrackPrivate* activeVideoTrack() { return m_activeVideoTrack; }
 
     bool active() const { return m_isActive; }
@@ -90,24 +94,21 @@ public:
     void stopProducingData();
     bool isProducingData() const;
 
-    void endStream();
-
     bool hasVideo() const;
     bool hasAudio() const;
     bool muted() const;
 
-    bool hasCaptureVideoSource() const;
-    bool hasCaptureAudioSource() const;
-    void setCaptureTracksMuted(bool);
-
     FloatSize intrinsicSize() const;
-
-    WeakPtr<MediaStreamPrivate> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(*this); }
 
     void monitorOrientation(OrientationNotifier&);
 
+#if !RELEASE_LOG_DISABLED
+    const Logger& logger() const final { return m_logger; }
+    const void* logIdentifier() const final { return m_logIdentifier; }
+#endif
+
 private:
-    MediaStreamPrivate(const MediaStreamTrackPrivateVector&, String&&);
+    MediaStreamPrivate(Ref<const Logger>&&, const MediaStreamTrackPrivateVector&, String&&);
 
     // MediaStreamTrackPrivate::Observer
     void trackStarted(MediaStreamTrackPrivate&) override;
@@ -119,14 +120,22 @@ private:
     void characteristicsChanged();
     void updateActiveVideoTrack();
 
-    void scheduleDeferredTask(Function<void ()>&&);
+    void forEachObserver(const WTF::Function<void(Observer&)>&) const;
 
-    WeakPtrFactory<MediaStreamPrivate> m_weakPtrFactory;
-    Vector<Observer*> m_observers;
+#if !RELEASE_LOG_DISABLED
+    const char* logClassName() const final { return "MediaStreamPrivate"; }
+    WTFLogChannel& logChannel() const final;
+#endif
+
+    HashSet<Observer*> m_observers;
     String m_id;
     MediaStreamTrackPrivate* m_activeVideoTrack { nullptr };
     HashMap<String, RefPtr<MediaStreamTrackPrivate>> m_trackSet;
     bool m_isActive { false };
+#if !RELEASE_LOG_DISABLED
+    Ref<const Logger> m_logger;
+    const void* m_logIdentifier;
+#endif
 };
 
 typedef Vector<RefPtr<MediaStreamPrivate>> MediaStreamPrivateVector;

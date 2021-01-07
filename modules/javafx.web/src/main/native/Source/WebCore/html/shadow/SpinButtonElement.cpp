@@ -38,9 +38,12 @@
 #include "RenderTheme.h"
 #include "ScrollbarTheme.h"
 #include "WheelEvent.h"
+#include <wtf/IsoMallocInlines.h>
 #include <wtf/Ref.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(SpinButtonElement);
 
 using namespace HTMLNames;
 
@@ -53,7 +56,7 @@ inline SpinButtonElement::SpinButtonElement(Document& document, SpinButtonOwner&
     , m_repeatingTimer(*this, &SpinButtonElement::repeatingTimerFired)
 {
     setHasCustomStyleResolveCallbacks();
-    setPseudo(AtomicString("-webkit-inner-spin-button", AtomicString::ConstructFromLiteral));
+    setPseudo(AtomString("-webkit-inner-spin-button", AtomString::ConstructFromLiteral));
 }
 
 Ref<SpinButtonElement> SpinButtonElement::create(Document& document, SpinButtonOwner& spinButtonOwner)

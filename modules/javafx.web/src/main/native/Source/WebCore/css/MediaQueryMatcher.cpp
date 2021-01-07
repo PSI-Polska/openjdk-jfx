@@ -28,6 +28,7 @@
 #include "MediaQueryEvaluator.h"
 #include "MediaQueryList.h"
 #include "MediaQueryListListener.h"
+#include "MediaQueryParserContext.h"
 #include "NodeRenderStyle.h"
 #include "RenderElement.h"
 #include "StyleResolver.h"
@@ -37,7 +38,7 @@
 namespace WebCore {
 
 MediaQueryMatcher::MediaQueryMatcher(Document& document)
-    : m_document(&document)
+    : m_document(makeWeakPtr(document))
 {
 }
 
@@ -66,7 +67,7 @@ std::unique_ptr<RenderStyle> MediaQueryMatcher::documentElementUserAgentStyle() 
     if (!documentElement)
         return nullptr;
 
-    return m_document->styleScope().resolver().styleForElement(*documentElement, m_document->renderStyle(), nullptr, MatchOnlyUserAgentRules).renderStyle;
+    return m_document->styleScope().resolver().styleForElement(*documentElement, m_document->renderStyle(), nullptr, RuleMatchingBehavior::MatchOnlyUserAgentRules).renderStyle;
 }
 
 bool MediaQueryMatcher::evaluate(const MediaQuerySet& media)
@@ -82,8 +83,8 @@ RefPtr<MediaQueryList> MediaQueryMatcher::matchMedia(const String& query)
     if (!m_document)
         return nullptr;
 
-    auto media = MediaQuerySet::create(query);
-    reportMediaQueryWarningIfNeeded(m_document, media.ptr());
+    auto media = MediaQuerySet::create(query, MediaQueryParserContext(*m_document));
+    reportMediaQueryWarningIfNeeded(m_document.get(), media.ptr());
     bool result = evaluate(media.get());
     return MediaQueryList::create(*this, WTFMove(media), result);
 }
@@ -108,7 +109,7 @@ void MediaQueryMatcher::removeListener(MediaQueryListListener& listener, MediaQu
     });
 }
 
-void MediaQueryMatcher::styleResolverChanged()
+void MediaQueryMatcher::evaluateAll()
 {
     ASSERT(m_document);
 

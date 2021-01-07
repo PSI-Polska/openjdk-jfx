@@ -26,6 +26,7 @@
 namespace WTF {
 
 class TextBreakIteratorCF {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     enum class Mode {
         Caret,
@@ -56,7 +57,7 @@ public:
         m_string = string.createCFStringWithoutCopying();
     }
 
-    std::optional<unsigned> preceding(unsigned location) const
+    Optional<unsigned> preceding(unsigned location) const
     {
         if (!location)
             return { };
@@ -67,7 +68,7 @@ public:
         return range.location;
     }
 
-    std::optional<unsigned> following(unsigned location) const
+    Optional<unsigned> following(unsigned location) const
     {
         if (location >= static_cast<unsigned long>(CFStringGetLength(m_string.get())))
             return { };

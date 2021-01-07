@@ -21,15 +21,21 @@
 
 #pragma once
 
-#include "JSDestructibleObject.h"
+#include "JSObject.h"
 
 namespace JSC {
 
 // This class is used as a base for classes such as String,
-// Number, Boolean and Date which are wrappers for primitive types.
-class JSWrapperObject : public JSDestructibleObject {
+// Number, Boolean and Symbol which are wrappers for primitive types.
+class JSWrapperObject : public JSNonFinalObject {
 public:
-    typedef JSDestructibleObject Base;
+    using Base = JSNonFinalObject;
+
+    template<typename, SubspaceAccess>
+    static void subspaceFor(VM&)
+    {
+        RELEASE_ASSERT_NOT_REACHED();
+    }
 
     static size_t allocationSize(Checked<size_t> inlineCapacity)
     {
@@ -65,7 +71,7 @@ private:
 };
 
 inline JSWrapperObject::JSWrapperObject(VM& vm, Structure* structure)
-    : JSDestructibleObject(vm, structure)
+    : Base(vm, structure)
 {
 }
 

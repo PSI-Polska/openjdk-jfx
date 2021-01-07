@@ -27,12 +27,14 @@
 
 #include "Position.h"
 #include <wtf/Forward.h>
+#include <wtf/HashSet.h>
 #include <wtf/unicode/CharacterNames.h>
 
 namespace WebCore {
 
 class Document;
 class HTMLElement;
+class HTMLImageElement;
 class HTMLSpanElement;
 class HTMLTextFormControlElement;
 class RenderBlock;
@@ -102,6 +104,8 @@ bool areIdenticalElements(const Node&, const Node&);
 
 bool positionBeforeOrAfterNodeIsCandidate(Node&);
 
+WEBCORE_EXPORT HashSet<RefPtr<HTMLImageElement>> visibleImageElementsInRangeWithNonLoadedImages(const Range&);
+
 // -------------------------------------------------------------------------
 // Position
 // -------------------------------------------------------------------------
@@ -121,7 +125,7 @@ Position lastPositionInOrAfterNode(Node*);
 Position firstEditablePositionAfterPositionInRoot(const Position&, ContainerNode* root);
 Position lastEditablePositionBeforePositionInRoot(const Position&, ContainerNode* root);
 
-int comparePositions(const Position&, const Position&);
+WEBCORE_EXPORT int comparePositions(const Position&, const Position&);
 
 WEBCORE_EXPORT bool isEditablePosition(const Position&, EditableType = ContentIsEditable);
 bool isRichlyEditablePosition(const Position&);
@@ -142,7 +146,7 @@ VisiblePosition visiblePositionAfterNode(Node&);
 
 bool lineBreakExistsAtVisiblePosition(const VisiblePosition&);
 
-int comparePositions(const VisiblePosition&, const VisiblePosition&);
+WEBCORE_EXPORT int comparePositions(const VisiblePosition&, const VisiblePosition&);
 
 WEBCORE_EXPORT int indexForVisiblePosition(const VisiblePosition&, RefPtr<ContainerNode>& scope);
 int indexForVisiblePosition(Node&, const VisiblePosition&, bool forSelectionPreservation);
@@ -156,7 +160,7 @@ VisiblePosition visiblePositionForIndexUsingCharacterIterator(Node&, int index);
 
 WEBCORE_EXPORT Ref<HTMLElement> createDefaultParagraphElement(Document&);
 Ref<HTMLElement> createHTMLElement(Document&, const QualifiedName&);
-Ref<HTMLElement> createHTMLElement(Document&, const AtomicString&);
+Ref<HTMLElement> createHTMLElement(Document&, const AtomString&);
 
 WEBCORE_EXPORT HTMLElement* enclosingList(Node*);
 HTMLElement* outermostEnclosingList(Node*, Node* rootList = nullptr);

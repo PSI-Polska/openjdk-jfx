@@ -85,19 +85,19 @@ bool YouTubePluginReplacement::installReplacement(ShadowRoot& root)
 
     auto iframeElement = HTMLIFrameElement::create(HTMLNames::iframeTag, m_parentElement->document());
     if (m_attributes.contains("width"))
-        iframeElement->setAttributeWithoutSynchronization(HTMLNames::widthAttr, AtomicString("100%", AtomicString::ConstructFromLiteral));
+        iframeElement->setAttributeWithoutSynchronization(HTMLNames::widthAttr, AtomString("100%", AtomString::ConstructFromLiteral));
 
     const auto& heightValue = m_attributes.find("height");
     if (heightValue != m_attributes.end()) {
-        iframeElement->setAttribute(HTMLNames::styleAttr, AtomicString("max-height: 100%", AtomicString::ConstructFromLiteral));
+        iframeElement->setAttribute(HTMLNames::styleAttr, AtomString("max-height: 100%", AtomString::ConstructFromLiteral));
         iframeElement->setAttributeWithoutSynchronization(HTMLNames::heightAttr, heightValue->value);
     }
 
     iframeElement->setAttributeWithoutSynchronization(HTMLNames::srcAttr, youTubeURL(m_attributes.get("src")));
-    iframeElement->setAttributeWithoutSynchronization(HTMLNames::frameborderAttr, AtomicString("0", AtomicString::ConstructFromLiteral));
+    iframeElement->setAttributeWithoutSynchronization(HTMLNames::frameborderAttr, AtomString("0", AtomString::ConstructFromLiteral));
 
     // Disable frame flattening for this iframe.
-    iframeElement->setAttributeWithoutSynchronization(HTMLNames::scrollingAttr, AtomicString("no", AtomicString::ConstructFromLiteral));
+    iframeElement->setAttributeWithoutSynchronization(HTMLNames::scrollingAttr, AtomString("no", AtomString::ConstructFromLiteral));
     m_embedShadowElement->appendChild(iframeElement);
 
     return true;
@@ -176,7 +176,7 @@ static YouTubePluginReplacement::KeyValueMap queryKeysAndValues(const String& qu
 
 static bool isYouTubeURL(const URL& url)
 {
-    String hostName = url.host();
+    auto hostName = url.host();
     return equalLettersIgnoringASCIICase(hostName, "m.youtube.com")
         || equalLettersIgnoringASCIICase(hostName, "youtu.be")
         || equalLettersIgnoringASCIICase(hostName, "www.youtube.com")
@@ -203,7 +203,7 @@ static URL processAndCreateYouTubeURL(const URL& url, bool& isYouTubeShortenedUR
     if (!isYouTubeURL(url))
         return URL();
 
-    String hostName = url.host();
+    auto hostName = url.host();
     bool isYouTubeMobileWebAppURL = equalLettersIgnoringASCIICase(hostName, "m.youtube.com");
     isYouTubeShortenedURL = equalLettersIgnoringASCIICase(hostName, "youtu.be");
 
@@ -327,12 +327,9 @@ String YouTubePluginReplacement::youTubeURLFromAbsoluteURL(const URL& srcURL, co
         finalURL.appendLiteral("http://www.youtube.com");
     else
         finalURL.append(srcURLPrefix);
-    finalURL.appendLiteral("/embed/");
-    finalURL.append(videoID);
-    if (!query.isEmpty()) {
-        finalURL.append('?');
-        finalURL.append(query);
-    }
+    finalURL.append("/embed/", videoID);
+    if (!query.isEmpty())
+        finalURL.append('?', query);
     return finalURL.toString();
 }
 

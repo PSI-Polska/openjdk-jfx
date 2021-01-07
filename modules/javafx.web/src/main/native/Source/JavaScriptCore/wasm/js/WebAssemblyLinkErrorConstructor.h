@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +34,10 @@ namespace JSC {
 
 class WebAssemblyLinkErrorPrototype;
 
-class WebAssemblyLinkErrorConstructor : public InternalFunction {
+class WebAssemblyLinkErrorConstructor final : public InternalFunction {
 public:
     typedef InternalFunction Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
     static WebAssemblyLinkErrorConstructor* create(VM&, Structure*, WebAssemblyLinkErrorPrototype*);
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue);
@@ -50,6 +50,7 @@ protected:
 private:
     WebAssemblyLinkErrorConstructor(VM&, Structure*);
 };
+STATIC_ASSERT_ISO_SUBSPACE_SHARABLE(WebAssemblyLinkErrorConstructor, InternalFunction);
 
 } // namespace JSC
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007, 2008, 2012-2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2007-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,6 +44,8 @@ namespace JSC {
 
 class SymbolTable;
 
+DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(SymbolTableEntryFatEntry);
+
 static ALWAYS_INLINE int missingSymbolMarker() { return std::numeric_limits<int>::max(); }
 
 // The bit twiddling in this class assumes that every register index is a
@@ -73,6 +75,8 @@ static ALWAYS_INLINE int missingSymbolMarker() { return std::numeric_limits<int>
 // copy:     SymbolTableEntry --> FatEntry -----^
 
 struct SymbolTableEntry {
+    friend class CachedSymbolTableEntry;
+
 private:
     static VarOffset varOffsetFromBits(intptr_t bits)
     {
@@ -227,7 +231,7 @@ public:
 
     bool isWatchable() const
     {
-        return (m_bits & KindBitsMask) == ScopeKindBits;
+        return (m_bits & KindBitsMask) == ScopeKindBits && VM::canUseJIT();
     }
 
     // Asserts if the offset is anything but a scope offset. This structures the assertions
@@ -289,8 +293,6 @@ public:
 
     void prepareToWatch();
 
-    void addWatchpoint(Watchpoint*);
-
     // This watchpoint set is initialized clear, and goes through the following state transitions:
     //
     // First write to this var, in any scope that has this symbol table: Clear->IsWatched.
@@ -310,10 +312,12 @@ public:
     // initializes that var in just one of them. This means that a compilation could constant-fold to one
     // of the scopes that still has an undefined value for this variable. That's fine, because at that
     // point any write to any of the instances of that variable would fire the watchpoint.
+    //
+    // Note that watchpointSet() returns nullptr if JIT is disabled.
     WatchpointSet* watchpointSet()
     {
         if (!isFat())
-            return 0;
+            return nullptr;
         return fatEntry()->m_watchpoints.get();
     }
 
@@ -330,7 +334,7 @@ private:
     static const intptr_t FlagBits = 6;
 
     class FatEntry {
-        WTF_MAKE_FAST_ALLOCATED;
+        WTF_MAKE_STRUCT_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(SymbolTableEntryFatEntry);
     public:
         FatEntry(intptr_t bits)
             : m_bits(bits & ~SlimFlag)
@@ -343,7 +347,6 @@ private:
     };
 
     SymbolTableEntry& copySlow(const SymbolTableEntry&);
-    JS_EXPORT_PRIVATE void notifyWriteSlow(VM&, JSValue, const FireDetail&);
 
     bool isFat() const
     {
@@ -432,19 +435,27 @@ private:
 };
 
 struct SymbolTableIndexHashTraits : HashTraits<SymbolTableEntry> {
-    static const bool needsDestruction = true;
+    static constexpr bool needsDestruction = true;
 };
 
 class SymbolTable final : public JSCell {
+    friend class CachedSymbolTable;
+
 public:
     typedef JSCell Base;
-    static const unsigned StructureFlags = Base::StructureFlags | StructureIsImmortal;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | StructureIsImmortal;
 
     typedef HashMap<RefPtr<UniquedStringImpl>, SymbolTableEntry, IdentifierRepHash, HashTraits<RefPtr<UniquedStringImpl>>, SymbolTableIndexHashTraits> Map;
     typedef HashMap<RefPtr<UniquedStringImpl>, GlobalVariableID, IdentifierRepHash> UniqueIDMap;
     typedef HashMap<RefPtr<UniquedStringImpl>, RefPtr<TypeSet>, IdentifierRepHash> UniqueTypeSetMap;
     typedef HashMap<VarOffset, RefPtr<UniquedStringImpl>> OffsetToVariableMap;
     typedef Vector<SymbolTableEntry*> LocalToEntryVec;
+
+    template<typename CellType, SubspaceAccess>
+    static IsoSubspace* subspaceFor(VM& vm)
+    {
+        return &vm.symbolTableSpace;
+    }
 
     static SymbolTable* create(VM& vm)
     {
@@ -453,7 +464,7 @@ public:
         return symbolTable;
     }
 
-    static const bool needsDestruction = true;
+    static constexpr bool needsDestruction = true;
     static void destroy(JSCell*);
 
     static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
@@ -627,8 +638,9 @@ public:
     void setArgumentsLength(VM& vm, uint32_t length)
     {
         if (UNLIKELY(!m_arguments))
-            m_arguments.set(vm, this, ScopedArgumentsTable::create(vm));
-        m_arguments.set(vm, this, m_arguments->setLength(vm, length));
+            m_arguments.set(vm, this, ScopedArgumentsTable::create(vm, length));
+        else
+            m_arguments.set(vm, this, m_arguments->setLength(vm, length));
     }
 
     ScopeOffset argumentOffset(uint32_t i) const
@@ -682,11 +694,18 @@ public:
     CodeBlock* rareDataCodeBlock();
     void setRareDataCodeBlock(CodeBlock*);
 
-    InferredValue* singletonScope() { return m_singletonScope.get(); }
+    InferredValue<JSScope>& singleton() { return m_singleton; }
+
+    void notifyCreation(VM& vm, JSScope* scope, const char* reason)
+    {
+        m_singleton.notifyWrite(vm, this, scope, reason);
+    }
 
     static void visitChildren(JSCell*, SlotVisitor&);
 
     DECLARE_EXPORT_INFO;
+
+    void finalizeUnconditionally(VM&);
 
 private:
     JS_EXPORT_PRIVATE SymbolTable(VM&);
@@ -696,8 +715,15 @@ private:
 
     Map m_map;
     ScopeOffset m_maxScopeOffset;
+public:
+    mutable ConcurrentJSLock m_lock;
+private:
+    unsigned m_usesNonStrictEval : 1;
+    unsigned m_nestedLexicalScope : 1; // Non-function LexicalScope.
+    unsigned m_scopeType : 3; // ScopeType
 
     struct SymbolTableRareData {
+        WTF_MAKE_STRUCT_FAST_ALLOCATED;
         UniqueIDMap m_uniqueIDMap;
         OffsetToVariableMap m_offsetToVariableMap;
         UniqueTypeSetMap m_uniqueTypeSetMap;
@@ -705,17 +731,10 @@ private:
     };
     std::unique_ptr<SymbolTableRareData> m_rareData;
 
-    bool m_usesNonStrictEval : 1;
-    bool m_nestedLexicalScope : 1; // Non-function LexicalScope.
-    unsigned m_scopeType : 3; // ScopeType
-
     WriteBarrier<ScopedArgumentsTable> m_arguments;
-    WriteBarrier<InferredValue> m_singletonScope;
+    InferredValue<JSScope> m_singleton;
 
     std::unique_ptr<LocalToEntryVec> m_localToEntry;
-
-public:
-    mutable ConcurrentJSLock m_lock;
 };
 
 } // namespace JSC

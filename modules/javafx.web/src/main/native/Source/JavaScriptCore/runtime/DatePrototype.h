@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 1999-2000 Harri Porten (porten@kde.org)
- *  Copyright (C) 2008 Apple Inc. All rights reserved.
+ *  Copyright (C) 2008-2019 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -26,13 +26,13 @@ namespace JSC {
 
 class ObjectPrototype;
 
-class DatePrototype : public JSNonFinalObject {
+class DatePrototype final : public JSNonFinalObject {
 private:
     DatePrototype(VM&, Structure*);
 
 public:
     typedef JSNonFinalObject Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
     static DatePrototype* create(VM& vm, JSGlobalObject* globalObject, Structure* structure)
     {
@@ -52,6 +52,6 @@ protected:
     void finishCreation(VM&, JSGlobalObject*);
 };
 
-EncodedJSValue JSC_HOST_CALL dateProtoFuncGetTime(ExecState*);
+EncodedJSValue JSC_HOST_CALL dateProtoFuncGetTime(JSGlobalObject*, CallFrame*);
 
 } // namespace JSC

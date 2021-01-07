@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2017-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,71 +30,120 @@
 #include "BExport.h"
 #include "BInline.h"
 #include "BPlatform.h"
+#include "Sizes.h"
 #include <cstddef>
 #include <inttypes.h>
 
-#if BCPU(ARM64)
-#define PRIMITIVE_GIGACAGE_SIZE 0x80000000llu
-#define JSVALUE_GIGACAGE_SIZE 0x40000000llu
-#define STRING_GIGACAGE_SIZE 0x40000000llu
-#define GIGACAGE_ALLOCATION_CAN_FAIL 1
-#else
-#define PRIMITIVE_GIGACAGE_SIZE 0x800000000llu
-#define JSVALUE_GIGACAGE_SIZE 0x400000000llu
-#define STRING_GIGACAGE_SIZE 0x400000000llu
-#define GIGACAGE_ALLOCATION_CAN_FAIL 0
-#endif
-
-// In Linux, if `vm.overcommit_memory = 2` is specified, mmap with large size can fail if it exceeds the size of RAM.
-// So we specify GIGACAGE_ALLOCATION_CAN_FAIL = 1.
-#if BOS(LINUX)
-#undef GIGACAGE_ALLOCATION_CAN_FAIL
-#define GIGACAGE_ALLOCATION_CAN_FAIL 1
-#endif
-
-static_assert(bmalloc::isPowerOfTwo(PRIMITIVE_GIGACAGE_SIZE), "");
-static_assert(bmalloc::isPowerOfTwo(JSVALUE_GIGACAGE_SIZE), "");
-static_assert(bmalloc::isPowerOfTwo(STRING_GIGACAGE_SIZE), "");
-
-#define GIGACAGE_SIZE_TO_MASK(size) ((size) - 1)
-
-#define PRIMITIVE_GIGACAGE_MASK GIGACAGE_SIZE_TO_MASK(PRIMITIVE_GIGACAGE_SIZE)
-#define JSVALUE_GIGACAGE_MASK GIGACAGE_SIZE_TO_MASK(JSVALUE_GIGACAGE_SIZE)
-#define STRING_GIGACAGE_MASK GIGACAGE_SIZE_TO_MASK(STRING_GIGACAGE_SIZE)
-
 #if ((BOS(DARWIN) || BOS(LINUX)) && \
-    (BCPU(X86_64) || (BCPU(ARM64) && !defined(__ILP32__) && (!BPLATFORM(IOS) || __IPHONE_OS_VERSION_MIN_REQUIRED >= 110300))))
+    (BCPU(X86_64) || (BCPU(ARM64) && !defined(__ILP32__) && (!BPLATFORM(IOS_FAMILY) || BPLATFORM(IOS)))))
 #define GIGACAGE_ENABLED 1
 #else
 #define GIGACAGE_ENABLED 0
 #endif
 
-#if BCPU(ARM64)
-#define GIGACAGE_BASE_PTRS_SIZE 16384
-#else
-#define GIGACAGE_BASE_PTRS_SIZE 4096
-#endif
-
-extern "C" alignas(GIGACAGE_BASE_PTRS_SIZE) BEXPORT char g_gigacageBasePtrs[GIGACAGE_BASE_PTRS_SIZE];
 
 namespace Gigacage {
-
-extern BEXPORT bool g_wasEnabled;
-BINLINE bool wasEnabled() { return g_wasEnabled; }
-
-struct BasePtrs {
-    void* primitive;
-    void* jsValue;
-    void* string;
-};
 
 enum Kind {
     Primitive,
     JSValue,
-    String
+    NumberOfKinds
 };
 
-static constexpr unsigned numKinds = 3;
+BINLINE const char* name(Kind kind)
+{
+    switch (kind) {
+    case Primitive:
+        return "Primitive";
+    case JSValue:
+        return "JSValue";
+    case NumberOfKinds:
+        break;
+    }
+    BCRASH();
+    return nullptr;
+}
+
+#if GIGACAGE_ENABLED
+
+constexpr size_t configSizeToProtect = 16 * bmalloc::Sizes::kB;
+
+#if BOS_EFFECTIVE_ADDRESS_WIDTH < 48
+constexpr size_t primitiveGigacageSize = 2 * bmalloc::Sizes::GB;
+constexpr size_t jsValueGigacageSize = 2 * bmalloc::Sizes::GB;
+constexpr size_t maximumCageSizeReductionForSlide = bmalloc::Sizes::GB / 4;
+#else
+constexpr size_t primitiveGigacageSize = 32 * bmalloc::Sizes::GB;
+constexpr size_t jsValueGigacageSize = 16 * bmalloc::Sizes::GB;
+constexpr size_t maximumCageSizeReductionForSlide = 4 * bmalloc::Sizes::GB;
+#endif
+
+// In Linux, if `vm.overcommit_memory = 2` is specified, mmap with large size can fail if it exceeds the size of RAM.
+// So we specify GIGACAGE_ALLOCATION_CAN_FAIL = 1.
+#if BOS(LINUX)
+#define GIGACAGE_ALLOCATION_CAN_FAIL 1
+#else
+#define GIGACAGE_ALLOCATION_CAN_FAIL 0
+#endif
+
+
+static_assert(bmalloc::isPowerOfTwo(primitiveGigacageSize), "");
+static_assert(bmalloc::isPowerOfTwo(jsValueGigacageSize), "");
+static_assert(primitiveGigacageSize > maximumCageSizeReductionForSlide, "");
+static_assert(jsValueGigacageSize > maximumCageSizeReductionForSlide, "");
+
+constexpr size_t gigacageSizeToMask(size_t size) { return size - 1; }
+
+constexpr size_t primitiveGigacageMask = gigacageSizeToMask(primitiveGigacageSize);
+constexpr size_t jsValueGigacageMask = gigacageSizeToMask(jsValueGigacageSize);
+
+struct Config {
+    void* basePtr(Kind kind) const
+    {
+        RELEASE_BASSERT(kind < NumberOfKinds);
+        return basePtrs[kind];
+    }
+
+    void setBasePtr(Kind kind, void* ptr)
+    {
+        RELEASE_BASSERT(kind < NumberOfKinds);
+        basePtrs[kind] = ptr;
+    }
+
+    union {
+        struct {
+            // All the fields in this struct should be chosen such that their
+            // initial value is 0 / null / falsy because Config is instantiated
+            // as a global singleton.
+
+            bool isEnabled;
+            bool isPermanentlyFrozen;
+            bool disablingPrimitiveGigacageIsForbidden;
+            bool shouldBeEnabled;
+
+            // We would like to just put the std::once_flag for these functions
+            // here, but we can't because std::once_flag has a implicitly-deleted
+            // default constructor. So, we use a boolean instead.
+            bool shouldBeEnabledHasBeenCalled;
+            bool ensureGigacageHasBeenCalled;
+
+            void* start;
+            size_t totalSize;
+            void* basePtrs[NumberOfKinds];
+        };
+        char ensureSize[configSizeToProtect];
+    };
+};
+static_assert(sizeof(Config) == configSizeToProtect, "Gigacage Config must fit in configSizeToProtect");
+
+extern "C" alignas(configSizeToProtect) BEXPORT Config g_gigacageConfig;
+
+// These constants are needed by the LLInt.
+constexpr ptrdiff_t offsetOfPrimitiveGigacageBasePtr = Kind::Primitive * sizeof(void*);
+constexpr ptrdiff_t offsetOfJSValueGigacageBasePtr = Kind::JSValue * sizeof(void*);
+
+
+BINLINE bool isEnabled() { return g_gigacageConfig.isEnabled; }
 
 BEXPORT void ensureGigacage();
 
@@ -104,64 +153,37 @@ BEXPORT void disablePrimitiveGigacage();
 BEXPORT void addPrimitiveDisableCallback(void (*)(void*), void*);
 BEXPORT void removePrimitiveDisableCallback(void (*)(void*), void*);
 
-BEXPORT void disableDisablingPrimitiveGigacageIfShouldBeEnabled();
+BEXPORT void forbidDisablingPrimitiveGigacage();
 
-BEXPORT bool isDisablingPrimitiveGigacageDisabled();
-inline bool isPrimitiveGigacagePermanentlyEnabled() { return isDisablingPrimitiveGigacageDisabled(); }
-inline bool canPrimitiveGigacageBeDisabled() { return !isDisablingPrimitiveGigacageDisabled(); }
+BEXPORT bool isDisablingPrimitiveGigacageForbidden();
+inline bool isPrimitiveGigacagePermanentlyEnabled() { return isDisablingPrimitiveGigacageForbidden(); }
+inline bool canPrimitiveGigacageBeDisabled() { return !isDisablingPrimitiveGigacageForbidden(); }
 
-BINLINE const char* name(Kind kind)
+BINLINE void* basePtr(Kind kind)
 {
-    switch (kind) {
-    case Primitive:
-        return "Primitive";
-    case JSValue:
-        return "JSValue";
-    case String:
-        return "String";
-    }
-    BCRASH();
-    return nullptr;
+    return g_gigacageConfig.basePtr(kind);
 }
 
-BINLINE void*& basePtr(BasePtrs& basePtrs, Kind kind)
+BINLINE void* addressOfBasePtr(Kind kind)
 {
-    switch (kind) {
-    case Primitive:
-        return basePtrs.primitive;
-    case JSValue:
-        return basePtrs.jsValue;
-    case String:
-        return basePtrs.string;
-    }
-    BCRASH();
-    return basePtrs.primitive;
-}
-
-BINLINE BasePtrs& basePtrs()
-{
-    return *reinterpret_cast<BasePtrs*>(reinterpret_cast<void*>(g_gigacageBasePtrs));
-}
-
-BINLINE void*& basePtr(Kind kind)
-{
-    return basePtr(basePtrs(), kind);
+    RELEASE_BASSERT(kind < NumberOfKinds);
+    return &g_gigacageConfig.basePtrs[kind];
 }
 
 BINLINE bool isEnabled(Kind kind)
 {
-    return !!basePtr(kind);
+    return !!g_gigacageConfig.basePtr(kind);
 }
 
 BINLINE size_t size(Kind kind)
 {
     switch (kind) {
     case Primitive:
-        return static_cast<size_t>(PRIMITIVE_GIGACAGE_SIZE);
+        return static_cast<size_t>(primitiveGigacageSize);
     case JSValue:
-        return static_cast<size_t>(JSVALUE_GIGACAGE_SIZE);
-    case String:
-        return static_cast<size_t>(STRING_GIGACAGE_SIZE);
+        return static_cast<size_t>(jsValueGigacageSize);
+    case NumberOfKinds:
+        break;
     }
     BCRASH();
     return 0;
@@ -174,7 +196,7 @@ BINLINE size_t alignment(Kind kind)
 
 BINLINE size_t mask(Kind kind)
 {
-    return GIGACAGE_SIZE_TO_MASK(size(kind));
+    return gigacageSizeToMask(size(kind));
 }
 
 template<typename Func>
@@ -182,14 +204,13 @@ void forEachKind(const Func& func)
 {
     func(Primitive);
     func(JSValue);
-    func(String);
 }
 
 template<typename T>
 BINLINE T* caged(Kind kind, T* ptr)
 {
     BASSERT(ptr);
-    void* gigacageBasePtr = basePtr(kind);
+    void* gigacageBasePtr = g_gigacageConfig.basePtr(kind);
     if (!gigacageBasePtr)
         return ptr;
     return reinterpret_cast<T*>(
@@ -197,13 +218,53 @@ BINLINE T* caged(Kind kind, T* ptr)
             reinterpret_cast<uintptr_t>(ptr) & mask(kind)));
 }
 
+template<typename T>
+BINLINE T* cagedMayBeNull(Kind kind, T* ptr)
+{
+    if (!ptr)
+        return ptr;
+    return caged(kind, ptr);
+}
+
 BINLINE bool isCaged(Kind kind, const void* ptr)
 {
     return caged(kind, ptr) == ptr;
 }
 
+BINLINE bool contains(const void* ptr)
+{
+    auto* start = reinterpret_cast<const uint8_t*>(g_gigacageConfig.start);
+    auto* p = reinterpret_cast<const uint8_t*>(ptr);
+    return static_cast<size_t>(p - start) < g_gigacageConfig.totalSize;
+}
+
 BEXPORT bool shouldBeEnabled();
 
+#else // GIGACAGE_ENABLED
+
+BINLINE void* basePtr(Kind)
+{
+    BCRASH();
+    static void* unreachable;
+    return unreachable;
+}
+BINLINE size_t size(Kind) { BCRASH(); return 0; }
+BINLINE void ensureGigacage() { }
+BINLINE bool contains(const void*) { return false; }
+BINLINE bool isEnabled() { return false; }
+BINLINE bool isCaged(Kind, const void*) { return true; }
+BINLINE bool isEnabled(Kind) { return false; }
+template<typename T> BINLINE T* caged(Kind, T* ptr) { return ptr; }
+template<typename T> BINLINE T* cagedMayBeNull(Kind, T* ptr) { return ptr; }
+BINLINE void forbidDisablingPrimitiveGigacage() { }
+BINLINE bool canPrimitiveGigacageBeDisabled() { return false; }
+BINLINE void disablePrimitiveGigacage() { }
+BINLINE void addPrimitiveDisableCallback(void (*)(void*), void*) { }
+BINLINE void removePrimitiveDisableCallback(void (*)(void*), void*) { }
+
+#endif // GIGACAGE_ENABLED
+
 } // namespace Gigacage
+
 
 

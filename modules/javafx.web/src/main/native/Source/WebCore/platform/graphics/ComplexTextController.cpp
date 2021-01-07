@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2007-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,12 +37,8 @@
 #include <wtf/text/TextBreakIterator.h>
 #include <wtf/unicode/CharacterNames.h>
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 #include <CoreText/CoreText.h>
-#endif
-
-#if PLATFORM(MAC)
-#include <ApplicationServices/ApplicationServices.h>
 #endif
 
 namespace WebCore {
@@ -59,7 +55,7 @@ public:
     TextLayout(RenderText& text, const FontCascade& font, float xPos)
         : m_font(font)
         , m_run(constructTextRun(text, xPos))
-        , m_controller(std::make_unique<ComplexTextController>(m_font, m_run, true))
+        , m_controller(makeUnique<ComplexTextController>(m_font, m_run, true))
     {
     }
 
@@ -90,39 +86,19 @@ private:
 
 void TextLayoutDeleter::operator()(TextLayout* layout) const
 {
-#if !PLATFORM(WIN) && !PLATFORM(JAVA)
     delete layout;
-#else
-    ASSERT_UNUSED(layout, !layout);
-#endif
 }
 
 std::unique_ptr<TextLayout, TextLayoutDeleter> FontCascade::createLayout(RenderText& text, float xPos, bool collapseWhiteSpace) const
 {
-#if !PLATFORM(WIN) && !PLATFORM(JAVA)
     if (!collapseWhiteSpace || !TextLayout::isNeeded(text, *this))
         return nullptr;
     return std::unique_ptr<TextLayout, TextLayoutDeleter>(new TextLayout(text, *this, xPos));
-#else
-    UNUSED_PARAM(text);
-    UNUSED_PARAM(xPos);
-    UNUSED_PARAM(collapseWhiteSpace);
-    return nullptr;
-#endif
 }
 
 float FontCascade::width(TextLayout& layout, unsigned from, unsigned len, HashSet<const Font*>* fallbackFonts)
 {
-#if !PLATFORM(WIN) && !PLATFORM(JAVA)
     return layout.width(from, len, fallbackFonts);
-#else
-    UNUSED_PARAM(layout);
-    UNUSED_PARAM(from);
-    UNUSED_PARAM(len);
-    UNUSED_PARAM(fallbackFonts);
-    ASSERT_NOT_REACHED();
-    return 0;
-#endif
 }
 
 void ComplexTextController::computeExpansionOpportunity()
@@ -130,7 +106,7 @@ void ComplexTextController::computeExpansionOpportunity()
     if (!m_expansion)
         m_expansionPerOpportunity = 0;
     else {
-        unsigned expansionOpportunityCount = FontCascade::expansionOpportunityCount(m_run.text(), m_run.ltr() ? LTR : RTL, m_run.expansionBehavior()).first;
+        unsigned expansionOpportunityCount = FontCascade::expansionOpportunityCount(m_run.text(), m_run.ltr() ? TextDirection::LTR : TextDirection::RTL, m_run.expansionBehavior()).first;
 
         if (!expansionOpportunityCount)
             m_expansionPerOpportunity = 0;
@@ -187,7 +163,7 @@ void ComplexTextController::finishConstruction()
 
 unsigned ComplexTextController::offsetForPosition(float h, bool includePartialGlyphs)
 {
-    if (h >= m_totalWidth)
+    if (h >= m_totalAdvance.width())
         return m_run.ltr() ? m_end : 0;
 
     if (h < 0)
@@ -203,7 +179,8 @@ unsigned ComplexTextController::offsetForPosition(float h, bool includePartialGl
         for (unsigned j = 0; j < complexTextRun.glyphCount(); ++j) {
             unsigned index = offsetIntoAdjustedGlyphs + j;
             float adjustedAdvance = m_adjustedBaseAdvances[index].width();
-            if (x < adjustedAdvance) {
+            bool hit = m_run.ltr() ? x < adjustedAdvance : (x <= adjustedAdvance && adjustedAdvance);
+            if (hit) {
                 unsigned hitGlyphStart = complexTextRun.indexAt(j);
                 unsigned hitGlyphEnd;
                 if (m_run.ltr())
@@ -213,19 +190,30 @@ unsigned ComplexTextController::offsetForPosition(float h, bool includePartialGl
 
                 // FIXME: Instead of dividing the glyph's advance equally between the characters, this
                 // could use the glyph's "ligature carets". This is available in CoreText via CTFontGetLigatureCaretPositions().
-                unsigned hitIndex = hitGlyphStart + (hitGlyphEnd - hitGlyphStart) * (m_run.ltr() ? x / adjustedAdvance : 1 - x / adjustedAdvance);
+                unsigned hitIndex;
+                if (m_run.ltr())
+                    hitIndex = hitGlyphStart + (hitGlyphEnd - hitGlyphStart) * (x / adjustedAdvance);
+                else {
+                    if (hitGlyphStart == hitGlyphEnd)
+                        hitIndex = hitGlyphStart;
+                    else if (x)
+                        hitIndex = hitGlyphEnd - (hitGlyphEnd - hitGlyphStart) * (x / adjustedAdvance);
+                    else
+                        hitIndex = hitGlyphEnd - 1;
+                }
+
                 unsigned stringLength = complexTextRun.stringLength();
                 CachedTextBreakIterator cursorPositionIterator(StringView(complexTextRun.characters(), stringLength), TextBreakIterator::Mode::Caret, nullAtom());
                 unsigned clusterStart;
                 if (cursorPositionIterator.isBoundary(hitIndex))
                     clusterStart = hitIndex;
                 else
-                    clusterStart = cursorPositionIterator.preceding(hitIndex).value_or(0);
+                    clusterStart = cursorPositionIterator.preceding(hitIndex).valueOr(0);
 
                 if (!includePartialGlyphs)
                     return complexTextRun.stringLocation() + clusterStart;
 
-                unsigned clusterEnd = cursorPositionIterator.following(hitIndex).value_or(stringLength);
+                unsigned clusterEnd = cursorPositionIterator.following(hitIndex).valueOr(stringLength);
 
                 float clusterWidth;
                 // FIXME: The search stops at the boundaries of complexTextRun. In theory, it should go on into neighboring ComplexTextRuns
@@ -284,6 +272,7 @@ static bool advanceByCombiningCharacterSequence(const UChar*& iterator, const UC
     // Consume marks.
     bool sawEmojiGroupCandidate = isEmojiGroupCandidate(baseCharacter);
     bool sawJoiner = false;
+    bool sawRegionalIndicator = isEmojiRegionalIndicator(baseCharacter);
     while (iterator < end) {
         UChar32 nextCharacter;
         unsigned markLength = 0;
@@ -293,6 +282,11 @@ static bool advanceByCombiningCharacterSequence(const UChar*& iterator, const UC
 
         if (isVariationSelector(nextCharacter) || isEmojiFitzpatrickModifier(nextCharacter))
             shouldContinue = true;
+
+        if (sawRegionalIndicator && isEmojiRegionalIndicator(nextCharacter)) {
+            shouldContinue = true;
+            sawRegionalIndicator = false;
+        }
 
         if (sawJoiner && isEmojiGroupCandidate(nextCharacter))
             shouldContinue = true;
@@ -314,19 +308,19 @@ static bool advanceByCombiningCharacterSequence(const UChar*& iterator, const UC
 }
 
 // FIXME: Capitalization is language-dependent and context-dependent and should operate on grapheme clusters instead of codepoints.
-static inline std::optional<UChar32> capitalized(UChar32 baseCharacter)
+static inline Optional<UChar32> capitalized(UChar32 baseCharacter)
 {
     if (U_GET_GC_MASK(baseCharacter) & U_GC_M_MASK)
-        return std::nullopt;
+        return WTF::nullopt;
 
     UChar32 uppercaseCharacter = u_toupper(baseCharacter);
     ASSERT(uppercaseCharacter == baseCharacter || (U_IS_BMP(baseCharacter) == U_IS_BMP(uppercaseCharacter)));
     if (uppercaseCharacter != baseCharacter)
         return uppercaseCharacter;
-    return std::nullopt;
+    return WTF::nullopt;
 }
 
-static bool shouldSynthesize(bool dontSynthesizeSmallCaps, const Font* nextFont, UChar32 baseCharacter, std::optional<UChar32> capitalizedBase, FontVariantCaps fontVariantCaps, bool engageAllSmallCapsProcessing)
+static bool shouldSynthesize(bool dontSynthesizeSmallCaps, const Font* nextFont, UChar32 baseCharacter, Optional<UChar32> capitalizedBase, FontVariantCaps fontVariantCaps, bool engageAllSmallCapsProcessing)
 {
     if (dontSynthesizeSmallCaps)
         return false;
@@ -739,7 +733,7 @@ void ComplexTextController::adjustGlyphsAndAdvances()
             FloatSize advance = treatAsSpace ? FloatSize(spaceWidth, advances[i].height()) : advances[i];
 
             if (ch == '\t' && m_run.allowTabs())
-                advance.setWidth(m_font.tabWidth(font, m_run.tabSize(), m_run.xPos() + m_totalWidth));
+                advance.setWidth(m_font.tabWidth(font, m_run.tabSize(), m_run.xPos() + m_totalAdvance.width()));
             else if (FontCascade::treatAsZeroWidthSpace(ch) && !treatAsSpace) {
                 advance.setWidth(0);
                 glyph = font.spaceGlyph();
@@ -776,12 +770,12 @@ void ComplexTextController::adjustGlyphsAndAdvances()
                 if (runForbidsTrailingExpansion)
                     forbidTrailingExpansion = m_run.ltr() ? isLastCharacter : isFirstCharacter;
                 // Handle justification and word-spacing.
-                bool ideograph = FontCascade::isCJKIdeographOrSymbol(ch);
+                static bool expandAroundIdeographs = FontCascade::canExpandAroundIdeographsInComplexText();
+                bool ideograph = expandAroundIdeographs && FontCascade::isCJKIdeographOrSymbol(ch);
                 if (treatAsSpace || ideograph || forceLeadingExpansion || forceTrailingExpansion) {
                     // Distribute the run's total expansion evenly over all expansion opportunities in the run.
                     if (m_expansion) {
-                        bool expandLeft, expandRight;
-                        std::tie(expandLeft, expandRight) = expansionLocation(ideograph, treatAsSpace, m_run.ltr(), afterExpansion, forbidLeadingExpansion, forbidTrailingExpansion, forceLeadingExpansion, forceTrailingExpansion);
+                        auto [expandLeft, expandRight] = expansionLocation(ideograph, treatAsSpace, m_run.ltr(), afterExpansion, forbidLeadingExpansion, forbidTrailingExpansion, forceLeadingExpansion, forceTrailingExpansion);
                         if (expandLeft) {
                             m_expansion -= m_expansionPerOpportunity;
                             // Increase previous width
@@ -790,7 +784,7 @@ void ComplexTextController::adjustGlyphsAndAdvances()
                                 complexTextRun.growInitialAdvanceHorizontally(m_expansionPerOpportunity);
                             } else {
                                 m_adjustedBaseAdvances.last().expand(m_expansionPerOpportunity, 0);
-                                m_totalWidth += m_expansionPerOpportunity;
+                                m_totalAdvance.expand(m_expansionPerOpportunity, 0);
                             }
                         }
                         if (expandRight) {
@@ -802,13 +796,13 @@ void ComplexTextController::adjustGlyphsAndAdvances()
                         afterExpansion = false;
 
                     // Account for word-spacing.
-                    if (treatAsSpace && (ch != '\t' || !m_run.allowTabs()) && (characterIndex > 0 || runIndex > 0) && m_font.wordSpacing())
+                    if (treatAsSpace && (ch != '\t' || !m_run.allowTabs()) && (characterIndex > 0 || runIndex > 0 || ch == noBreakSpace) && m_font.wordSpacing())
                         advance.expand(m_font.wordSpacing(), 0);
                 } else
                     afterExpansion = false;
             }
 
-            m_totalWidth += advance.width();
+            m_totalAdvance += advance;
 
             // FIXME: Combining marks should receive a text emphasis mark if they are combine with a space.
             if (m_forTextEmphasis && (!FontCascade::canReceiveTextEmphasis(ch) || (U_GET_GC_MASK(ch) & U_GC_M_MASK)))

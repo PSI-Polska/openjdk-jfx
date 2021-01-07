@@ -2,6 +2,7 @@
  * Copyright (C) 2010 University of Szeged
  * Copyright (C) 2010 Renata Hodovan (hodovan@inf.u-szeged.hu)
  * All rights reserved.
+ * Copyright (C) 2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,6 +37,10 @@
 
 namespace JSC {
 
+namespace Yarr {
+enum class Flags : uint8_t;
+}
+
 class RegExpCache : private WeakHandleOwner {
     WTF_MAKE_FAST_ALLOCATED;
 
@@ -46,19 +51,29 @@ public:
     RegExpCache(VM* vm);
     void deleteAllCode();
 
+    RegExp* ensureEmptyRegExp(VM& vm)
+    {
+        if (LIKELY(m_emptyRegExp))
+            return m_emptyRegExp.get();
+        return ensureEmptyRegExpSlow(vm);
+    }
+
 private:
 
-    static const unsigned maxStrongCacheablePatternLength = 256;
+    static constexpr unsigned maxStrongCacheablePatternLength = 256;
 
-    static const int maxStrongCacheableEntries = 32;
+    static constexpr int maxStrongCacheableEntries = 32;
 
     void finalize(Handle<Unknown>, void* context) override;
 
-    RegExp* lookupOrCreate(const WTF::String& patternString, RegExpFlags);
+    RegExp* ensureEmptyRegExpSlow(VM&);
+
+    RegExp* lookupOrCreate(const WTF::String& patternString, OptionSet<Yarr::Flags>);
     void addToStrongCache(RegExp*);
     RegExpCacheMap m_weakCache; // Holds all regular expressions currently live.
     int m_nextEntryInStrongCache;
     std::array<Strong<RegExp>, maxStrongCacheableEntries> m_strongCache; // Holds a select few regular expressions that have compiled and executed
+    Strong<RegExp> m_emptyRegExp;
     VM* m_vm;
 };
 

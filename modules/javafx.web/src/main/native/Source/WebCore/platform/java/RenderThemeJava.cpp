@@ -29,12 +29,10 @@
 #include <wtf/Vector.h>
 #include <wtf/text/StringBuilder.h>
 
-#include "Chrome.h"
-#include "ChromeClientJava.h"
 #include "CSSPropertyNames.h"
 #include "CSSFontSelector.h"
 #include "CSSValueKeywords.h"
-#include <wtf/java/JavaEnv.h>
+#include "PlatformJavaClasses.h"
 #include "HTMLMediaElement.h"
 #include "NotImplemented.h"
 #include "PaintInfo.h"
@@ -71,51 +69,6 @@ RenderTheme& RenderTheme::singleton()
 {
     static RenderTheme& sm_defaultInstance = *new RenderThemeJava();
     return sm_defaultInstance;
-}
-
-jclass getJRenderThemeClass()
-{
-    static JGClass jRenderThemeCls(
-        WebCore_GetJavaEnv()->FindClass("com/sun/webkit/graphics/RenderTheme"));
-    ASSERT(jRenderThemeCls);
-
-    return jRenderThemeCls;
-}
-
-static JLObject getJRenderTheme(JLObject page)
-{
-    JNIEnv* env = WebCore_GetJavaEnv();
-
-    if (!page) {
-        static jmethodID mid  = env->GetStaticMethodID(
-            PG_GetWebPageClass(env),
-            "fwkGetDefaultRenderTheme",
-            "()Lcom/sun/webkit/graphics/RenderTheme;");
-        ASSERT(mid);
-
-        JLObject jRenderTheme(env->CallStaticObjectMethod(PG_GetWebPageClass(env), mid));
-        CheckAndClearException(env);
-
-        return jRenderTheme;
-    }
-
-    static jmethodID mid  = env->GetMethodID(
-        PG_GetWebPageClass(env),
-        "getRenderTheme",
-        "()Lcom/sun/webkit/graphics/RenderTheme;");
-    ASSERT(mid);
-
-    JLObject jRenderTheme(env->CallObjectMethod(
-        page,
-        mid));
-    CheckAndClearException(env);
-
-    return jRenderTheme;
-}
-
-RefPtr<RQRef> RenderThemeJava::themeForPage(JLObject page)
-{
-    return RQRef::create(getJRenderTheme(page));
 }
 
 RenderThemeJava::RenderThemeJava()
@@ -174,7 +127,7 @@ bool RenderThemeJava::paintWidget(
             : CSSPropertyBackgroundColor
     ).rgb();
 
-    JNIEnv* env = WebCore_GetJavaEnv();
+    JNIEnv* env = WTF::GetJavaEnv();
 
     WTF::Vector<jbyte> extParams;
     if (JNI_EXPAND(SLIDER) == widgetIndex && is<RenderSlider>(object)) {
@@ -245,7 +198,7 @@ bool RenderThemeJava::paintWidget(
 #endif
     }
 
-    static jmethodID mid = env->GetMethodID(getJRenderThemeClass(), "createWidget",
+    static jmethodID mid = env->GetMethodID(PG_GetRenderThemeClass(env), "createWidget",
             "(JIIIIILjava/nio/ByteBuffer;)Lcom/sun/webkit/graphics/Ref;");
     ASSERT(mid);
 
@@ -255,7 +208,7 @@ bool RenderThemeJava::paintWidget(
             (jint)widgetIndex,
             (jint)state,
             (jint)rect.width(), (jint)rect.height(),
-            (jint)bgColor,
+            (jint)bgColor.value(),
             (jobject)JLObject(extParams.isEmpty()
                 ? nullptr
                 : env->NewDirectByteBuffer(
@@ -266,7 +219,7 @@ bool RenderThemeJava::paintWidget(
         //switch to WebKit default render
         return true;
     }
-    CheckAndClearException(env);
+    WTF::CheckAndClearException(env);
 
     // widgetRef will go into rq's inner refs vector.
     paintInfo.context().platformContext()->rq().freeSpace(20)
@@ -339,14 +292,14 @@ void RenderThemeJava::setRadioSize(RenderStyle& style) const
         return;
     }
 
-    JNIEnv* env = WebCore_GetJavaEnv();
+    JNIEnv* env = WTF::GetJavaEnv();
 
-    static jmethodID mid = env->GetMethodID(getJRenderThemeClass(), "getRadioButtonSize", "()I");
+    static jmethodID mid = env->GetMethodID(PG_GetRenderThemeClass(env), "getRadioButtonSize", "()I");
     ASSERT(mid);
 
     // Get from default theme object.
-    int radioRadius = env->CallIntMethod((jobject)getJRenderTheme(nullptr), mid);
-    CheckAndClearException(env);
+    int radioRadius = env->CallIntMethod((jobject)PG_GetRenderThemeObjectFromPage(env, nullptr), mid);
+    WTF::CheckAndClearException(env);
 
     if (style.width().isIntrinsicOrAuto()) {
         style.setWidth(Length(radioRadius, Fixed));
@@ -367,7 +320,7 @@ bool RenderThemeJava::paintButton(const RenderObject&o, const PaintInfo& i, cons
     return paintWidget(JNI_EXPAND(BUTTON), o, i, rect);
 }
 
-void RenderThemeJava::adjustTextFieldStyle(StyleResolver&, RenderStyle&, const Element*) const
+void RenderThemeJava::adjustTextFieldStyle(RenderStyle&, const Element*) const
 {
     notImplemented();
 }
@@ -377,7 +330,7 @@ bool RenderThemeJava::paintTextField(const RenderObject&o, const PaintInfo& i, c
     return paintWidget(JNI_EXPAND(TEXT_FIELD), o, i, rect);
 }
 
-void RenderThemeJava::adjustSearchFieldStyle(StyleResolver&, RenderStyle&, const Element*) const
+void RenderThemeJava::adjustSearchFieldStyle(RenderStyle&, const Element*) const
 {
     notImplemented();
 }
@@ -387,7 +340,7 @@ bool RenderThemeJava::paintSearchField(const RenderObject&o, const PaintInfo& i,
     return paintWidget(JNI_EXPAND(TEXT_FIELD), o, i, rect);
 }
 
-void RenderThemeJava::adjustTextAreaStyle(StyleResolver&, RenderStyle& style, const Element*) const
+void RenderThemeJava::adjustTextAreaStyle(RenderStyle& style, const Element*) const
 {
     if (style.paddingTop().isIntrinsicOrAuto())
         style.setPaddingTop(Length(1, Fixed));
@@ -400,7 +353,7 @@ bool RenderThemeJava::paintTextArea(const RenderObject&o, const PaintInfo& i, co
     return paintTextField(o, i, r);
 }
 
-void RenderThemeJava::adjustButtonStyle(StyleResolver&, RenderStyle& style, const Element*) const
+void RenderThemeJava::adjustButtonStyle(RenderStyle& style, const Element*) const
 {
     if (style.appearance() == PushButtonPart) {
         // Ignore line-height.
@@ -483,10 +436,10 @@ void RenderThemeJava::updateCachedSystemFontDescription(CSSValueID propId, FontC
     fontDescription = *cachedDesc;
 }
 
-void RenderThemeJava::adjustSliderTrackStyle(StyleResolver& selector, RenderStyle& style, const Element* element) const
+void RenderThemeJava::adjustSliderTrackStyle(RenderStyle& style, const Element* element) const
 {
     //utatodo: we need to measure the control in Java theme.
-    RenderTheme::adjustSliderTrackStyle(selector, style, element);
+    RenderTheme::adjustSliderTrackStyle(style, element);
 }
 
 bool RenderThemeJava::paintSliderTrack(const RenderObject&object, const PaintInfo& info, const IntRect& rect)
@@ -496,7 +449,7 @@ bool RenderThemeJava::paintSliderTrack(const RenderObject&object, const PaintInf
 
 void getSliderThumbSize(jint sliderType, int *width, int *height)
 {
-    JNIEnv* env = WebCore_GetJavaEnv();
+    JNIEnv* env = WTF::GetJavaEnv();
     JGClass cls = JLClass(env->FindClass(RENDER_MEDIA_CONTROLS_CLASS_NAME));
     ASSERT(cls);
 
@@ -504,7 +457,7 @@ void getSliderThumbSize(jint sliderType, int *width, int *height)
     ASSERT(mid);
 
     jint size = env->CallStaticIntMethod(cls, mid, sliderType);
-    CheckAndClearException(env);
+    WTF::CheckAndClearException(env);
     *width = (size >> 16) & 0xFFFF;
     *height = size & 0xFFFF;
 }
@@ -550,7 +503,7 @@ bool RenderThemeJava::paintSliderThumb(const RenderObject&, const PaintInfo&, co
     return false;
 }
 
-void RenderThemeJava::adjustMenuListStyle(StyleResolver&, RenderStyle& style, const Element*) const
+void RenderThemeJava::adjustMenuListStyle(RenderStyle& style, const Element*) const
 {
     // Add in the padding that we'd like to use.
     style.setPaddingRight(Length(20.0f + style.paddingRight().value(), Fixed));
@@ -562,10 +515,10 @@ bool RenderThemeJava::paintMenuList(const RenderObject& o, const PaintInfo& i, c
     return paintWidget(JNI_EXPAND(MENU_LIST), o, i, rect);
 }
 
-void RenderThemeJava::adjustMenuListButtonStyle(StyleResolver& selector, RenderStyle& style, const Element* e) const
+void RenderThemeJava::adjustMenuListButtonStyle(RenderStyle& style, const Element* e) const
 {
     style.resetBorderRadius();
-    adjustMenuListStyle(selector, style, e);
+    adjustMenuListStyle(style, e);
 }
 
 bool RenderThemeJava::paintMenuListButtonDecorations(const RenderBox& o, const PaintInfo& i, const FloatRect& r)
@@ -595,46 +548,46 @@ bool RenderThemeJava::supportsFocusRing(const RenderStyle& style) const
 
 Color RenderThemeJava::getSelectionColor(int index) const
 {
-    JNIEnv* env = WebCore_GetJavaEnv();
+    JNIEnv* env = WTF::GetJavaEnv();
     ASSERT(env);
 
-    static jmethodID mid = env->GetMethodID(getJRenderThemeClass(), "getSelectionColor", "(I)I");
+    static jmethodID mid = env->GetMethodID(PG_GetRenderThemeClass(env), "getSelectionColor", "(I)I");
     ASSERT(mid);
 
     // Get from default theme object.
-    jint c = env->CallIntMethod((jobject)getJRenderTheme(nullptr), mid, index);
-    CheckAndClearException(env);
+    jint c = env->CallIntMethod((jobject)PG_GetRenderThemeObjectFromPage(env, nullptr), mid, index);
+    WTF::CheckAndClearException(env);
 
     return Color(c);
 }
 
-Color RenderThemeJava::platformActiveSelectionBackgroundColor() const
+Color RenderThemeJava::platformActiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const
 {
     return getSelectionColor(JNI_EXPAND(BACKGROUND));
 }
 
-Color RenderThemeJava::platformInactiveSelectionBackgroundColor() const
+Color RenderThemeJava::platformInactiveSelectionBackgroundColor(OptionSet<StyleColor::Options> opt) const
 {
-    return platformActiveSelectionBackgroundColor();
+    return platformActiveSelectionBackgroundColor(opt);
 }
 
-Color RenderThemeJava::platformActiveSelectionForegroundColor() const
+Color RenderThemeJava::platformActiveSelectionForegroundColor(OptionSet<StyleColor::Options>) const
 {
     return getSelectionColor(JNI_EXPAND(FOREGROUND));
 }
 
-Color RenderThemeJava::platformInactiveSelectionForegroundColor() const
+Color RenderThemeJava::platformInactiveSelectionForegroundColor(OptionSet<StyleColor::Options> opt) const
 {
-    return platformActiveSelectionForegroundColor();
+    return platformActiveSelectionForegroundColor(opt);
 }
 
 #if ENABLE(VIDEO)
 String RenderThemeJava::mediaControlsScript()
 {
     StringBuilder scriptBuilder;
-    scriptBuilder.append(mediaControlsLocalizedStringsJavaScript, sizeof(mediaControlsLocalizedStringsJavaScript));
-    scriptBuilder.append(mediaControlsBaseJavaScript, sizeof(mediaControlsBaseJavaScript));
-    scriptBuilder.append(mediaControlsGtkJavaScript, sizeof(mediaControlsGtkJavaScript));
+    scriptBuilder.appendCharacters(mediaControlsLocalizedStringsJavaScript, sizeof(mediaControlsLocalizedStringsJavaScript));
+    scriptBuilder.appendCharacters(mediaControlsBaseJavaScript, sizeof(mediaControlsBaseJavaScript));
+    scriptBuilder.appendCharacters(mediaControlsGtkJavaScript, sizeof(mediaControlsGtkJavaScript));
     return scriptBuilder.toString();
 }
 

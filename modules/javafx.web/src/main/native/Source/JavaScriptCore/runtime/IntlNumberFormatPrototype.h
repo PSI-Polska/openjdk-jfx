@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2015 Andy VanWagoner (thetalecrafter@gmail.com)
+ * Copyright (C) 2015 Andy VanWagoner (andy@vanwagoner.family)
+ * Copyright (C) 2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,10 +32,10 @@
 
 namespace JSC {
 
-class IntlNumberFormatPrototype : public JSNonFinalObject {
+class IntlNumberFormatPrototype final : public JSNonFinalObject {
 public:
     typedef JSNonFinalObject Base;
-    static const unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | HasStaticPropertyTable;
 
     static IntlNumberFormatPrototype* create(VM&, JSGlobalObject*, Structure*);
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue);
@@ -42,7 +43,7 @@ public:
     DECLARE_INFO;
 
 protected:
-    void finishCreation(VM&, Structure*);
+    void finishCreation(VM&, JSGlobalObject*, Structure*);
 
 private:
     IntlNumberFormatPrototype(VM&, Structure*);

@@ -30,10 +30,11 @@
 #include "AudioTrackList.h"
 
 #include "AudioTrack.h"
+#include "HTMLMediaElement.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-AudioTrackList::AudioTrackList(HTMLMediaElement* element, ScriptExecutionContext* context)
+AudioTrackList::AudioTrackList(WeakPtr<HTMLMediaElement> element, ScriptExecutionContext* context)
     : TrackListBase(element, context)
 {
 }
@@ -66,7 +67,7 @@ AudioTrack* AudioTrackList::item(unsigned index) const
     return nullptr;
 }
 
-AudioTrack* AudioTrackList::getTrackById(const AtomicString& id) const
+AudioTrack* AudioTrackList::getTrackById(const AtomString& id) const
 {
     for (auto& inbandTrack : m_inbandTracks) {
         auto& track = downcast<AudioTrack>(*inbandTrack);
@@ -81,4 +82,5 @@ EventTargetInterface AudioTrackList::eventTargetInterface() const
     return AudioTrackListEventTargetInterfaceType;
 }
 
+} // namespace WebCore
 #endif

@@ -50,9 +50,6 @@ public:
     // A method asking if the theme's controls actually care about redrawing when hovered.
     bool supportsHover(const RenderStyle&) const override { return true; }
 
-    static void setTheme(RefPtr<RQRef> theme);
-    static RefPtr<RQRef> themeForPage(JLObject page);
-
 protected:
     bool paintCheckbox(const RenderObject& o, const PaintInfo& i, const IntRect& r) override;
     void setCheckboxSize(RenderStyle& style) const override;
@@ -60,29 +57,29 @@ protected:
     bool paintRadio(const RenderObject& o, const PaintInfo& i, const IntRect& r) override;
     void setRadioSize(RenderStyle& style) const override;
 
-    void adjustButtonStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustButtonStyle(RenderStyle&, const Element*) const override;
     bool paintButton(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    void adjustTextFieldStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustTextFieldStyle(RenderStyle&, const Element*) const override;
     bool paintTextField(const RenderObject&, const PaintInfo&, const FloatRect&) override;
 
-    void adjustSearchFieldStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustSearchFieldStyle(RenderStyle&, const Element*) const override;
     bool paintSearchField(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    void adjustMenuListStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustMenuListStyle(RenderStyle&, const Element*) const override;
     bool paintMenuList(const RenderObject&, const PaintInfo&, const FloatRect&) override;
 
-    void adjustMenuListButtonStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustMenuListButtonStyle(RenderStyle&, const Element*) const override;
     bool paintMenuListButtonDecorations(const RenderBox&, const PaintInfo&, const FloatRect&) override;
 
-    void adjustTextAreaStyle(StyleResolver&, RenderStyle&, const Element* e) const override;
+    void adjustTextAreaStyle(RenderStyle&, const Element* e) const override;
     bool paintTextArea(const RenderObject&, const PaintInfo&, const FloatRect&) override;
     bool supportsFocusRing(const RenderStyle&) const override;
 
-    Color platformActiveSelectionBackgroundColor() const override;
-    Color platformInactiveSelectionBackgroundColor() const override;
-    Color platformActiveSelectionForegroundColor() const override;
-    Color platformInactiveSelectionForegroundColor() const override;
+    Color platformActiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformInactiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformActiveSelectionForegroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformInactiveSelectionForegroundColor(OptionSet<StyleColor::Options>) const override;
 
 #if ENABLE(VIDEO)
     String mediaControlsScript() override;
@@ -127,7 +124,7 @@ protected:
     void adjustSliderThumbSize(RenderStyle&, const Element*) const override;
     bool paintSliderThumb(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
-    void adjustSliderTrackStyle(StyleResolver&, RenderStyle&, const Element*) const override;
+    void adjustSliderTrackStyle(RenderStyle&, const Element*) const override;
     bool paintSliderTrack(const RenderObject&, const PaintInfo&, const IntRect&) override;
 
 

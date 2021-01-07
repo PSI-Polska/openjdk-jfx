@@ -84,15 +84,15 @@ bool FELighting::setKernelUnitLengthY(float kernelUnitLengthY)
     return true;
 }
 
-const static int cPixelSize = 4;
-const static int cAlphaChannelOffset = 3;
-const static uint8_t cOpaqueAlpha = static_cast<uint8_t>(0xFF);
+static constexpr int cPixelSize = 4;
+static constexpr int cAlphaChannelOffset = 3;
+static constexpr uint8_t cOpaqueAlpha = static_cast<uint8_t>(0xFF);
 
 // These factors and the normal coefficients come from the table under https://www.w3.org/TR/SVG/filters.html#feDiffuseLightingElement.
-const static float cFactor1div2 = -1 / 2.f;
-const static float cFactor1div3 = -1 / 3.f;
-const static float cFactor1div4 = -1 / 4.f;
-const static float cFactor2div3 = -2 / 3.f;
+static constexpr float cFactor1div2 = -1 / 2.f;
+static constexpr float cFactor1div3 = -1 / 3.f;
+static constexpr float cFactor1div4 = -1 / 4.f;
+static constexpr float cFactor2div3 = -2 / 3.f;
 
 inline IntSize FELighting::LightingData::topLeftNormal(int offset) const
 {
@@ -295,9 +295,9 @@ void FELighting::setPixelInternal(int offset, const LightingData& data, const Li
         lightStrength = 0;
 
     uint8_t pixelValue[3] = {
-        static_cast<uint8_t>(lightStrength * lightingData.colorVector.x()),
-        static_cast<uint8_t>(lightStrength * lightingData.colorVector.y()),
-        static_cast<uint8_t>(lightStrength * lightingData.colorVector.z())
+        static_cast<uint8_t>(lightStrength * lightingData.colorVector.x() * 255.0f),
+        static_cast<uint8_t>(lightStrength * lightingData.colorVector.y() * 255.0f),
+        static_cast<uint8_t>(lightStrength * lightingData.colorVector.z() * 255.0f)
     };
 
     data.pixels->setRange(pixelValue, 3, offset);
@@ -380,7 +380,7 @@ void FELighting::platformApplyGeneric(const LightingData& data, const LightSourc
 inline void FELighting::platformApply(const LightingData& data, const LightSource::PaintingData& paintingData)
 {
     // The selection here eventually should happen dynamically on some platforms.
-#if CPU(ARM_NEON) && CPU(ARM_TRADITIONAL) && COMPILER(GCC_OR_CLANG)
+#if CPU(ARM_NEON) && CPU(ARM_TRADITIONAL) && COMPILER(GCC_COMPATIBLE)
     platformApplyNeon(data, paintingData);
 #else
     platformApplyGeneric(data, paintingData);
@@ -403,8 +403,8 @@ bool FELighting::drawLighting(Uint8ClampedArray& pixels, int width, int height)
     data.widthDecreasedByOne = width - 1;
     data.heightDecreasedByOne = height - 1;
 
-    Color lightColor = (operatingColorSpace() == ColorSpaceLinearRGB) ? sRGBToLinearColor(m_lightingColor) : m_lightingColor;
-    paintingData.initialLightingData.colorVector = FloatPoint3D(lightColor.red(), lightColor.green(), lightColor.blue());
+    FloatComponents lightColor = (operatingColorSpace() == ColorSpace::LinearRGB) ? sRGBColorToLinearComponents(m_lightingColor) : FloatComponents(m_lightingColor);
+    paintingData.initialLightingData.colorVector = FloatPoint3D(lightColor.components[0], lightColor.components[1], lightColor.components[2]);
     m_lightSource->initPaintingData(*this, paintingData);
 
     // Top left.

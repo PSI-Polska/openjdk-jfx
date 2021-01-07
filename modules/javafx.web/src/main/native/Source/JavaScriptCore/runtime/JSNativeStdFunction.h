@@ -30,20 +30,24 @@
 namespace JSC {
 
 class JSGlobalObject;
-class NativeStdFunctionCell;
 
-typedef std::function<EncodedJSValue (ExecState*)> NativeStdFunction;
+using NativeStdFunction = WTF::Function<EncodedJSValue(JSGlobalObject*, CallFrame*)>;
 
-class JSNativeStdFunction : public JSFunction {
+class JSNativeStdFunction final : public JSFunction {
 public:
-    typedef JSFunction Base;
+    using Base = JSFunction;
 
-    const static unsigned StructureFlags = Base::StructureFlags;
+    static constexpr unsigned StructureFlags = Base::StructureFlags;
+    static constexpr bool needsDestruction = true;
+    static void destroy(JSCell* cell)
+    {
+        static_cast<JSNativeStdFunction*>(cell)->JSNativeStdFunction::~JSNativeStdFunction();
+    }
 
-    template<typename CellType>
+    template<typename CellType, SubspaceAccess mode>
     static IsoSubspace* subspaceFor(VM& vm)
     {
-        return &vm.nativeStdFunctionSpace;
+        return vm.nativeStdFunctionSpace<mode>();
     }
 
     DECLARE_EXPORT_INFO;
@@ -56,17 +60,17 @@ public:
         return Structure::create(vm, globalObject, prototype, TypeInfo(JSFunctionType, StructureFlags), info());
     }
 
-    NativeStdFunctionCell* nativeStdFunctionCell() { return m_functionCell.get(); }
+    const NativeStdFunction& function() { return m_function; }
 
 protected:
     static void visitChildren(JSCell*, SlotVisitor&);
 
-    void finishCreation(VM&, NativeExecutable*, int length, const String& name, NativeStdFunctionCell*);
+    void finishCreation(VM&, NativeExecutable*, int length, const String& name);
 
 private:
-    JSNativeStdFunction(VM&, JSGlobalObject*, Structure*);
+    JSNativeStdFunction(VM&, NativeExecutable*, JSGlobalObject*, Structure*, NativeStdFunction&&);
 
-    WriteBarrier<NativeStdFunctionCell> m_functionCell;
+    NativeStdFunction m_function;
 };
 
 } // namespace JSC

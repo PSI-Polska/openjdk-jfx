@@ -38,9 +38,9 @@
 #endif
 
 namespace JSC {
+class CallFrame;
 class ConsoleClient;
 class Exception;
-class ExecState;
 class JSGlobalObject;
 }
 
@@ -55,6 +55,7 @@ class InspectorDebuggerAgent;
 class InspectorScriptProfilerAgent;
 class JSGlobalObjectConsoleClient;
 class ScriptCallStack;
+struct JSAgentContext;
 
 class JSGlobalObjectInspectorController final
     : public InspectorEnvironment
@@ -66,10 +67,10 @@ class JSGlobalObjectInspectorController final
     WTF_MAKE_FAST_ALLOCATED;
 public:
     JSGlobalObjectInspectorController(JSC::JSGlobalObject&);
-    ~JSGlobalObjectInspectorController();
+    ~JSGlobalObjectInspectorController() override;
 
-    void connectFrontend(FrontendChannel*, bool isAutomaticInspection, bool immediatelyPause);
-    void disconnectFrontend(FrontendChannel*);
+    void connectFrontend(FrontendChannel&, bool isAutomaticInspection, bool immediatelyPause);
+    void disconnectFrontend(FrontendChannel&);
 
     void dispatchMessageFromFrontend(const String&);
 
@@ -78,12 +79,12 @@ public:
     bool includesNativeCallStackWhenReportingExceptions() const { return m_includeNativeCallStackWithExceptions; }
     void setIncludesNativeCallStackWhenReportingExceptions(bool includesNativeCallStack) { m_includeNativeCallStackWithExceptions = includesNativeCallStack; }
 
-    void reportAPIException(JSC::ExecState*, JSC::Exception*);
+    void reportAPIException(JSC::JSGlobalObject*, JSC::Exception*);
 
     JSC::ConsoleClient* consoleClient() const;
 
     bool developerExtrasEnabled() const override;
-    bool canAccessInspectedScriptState(JSC::ExecState*) const override { return true; }
+    bool canAccessInspectedScriptState(JSC::JSGlobalObject*) const override { return true; }
     InspectorFunctionCallHandler functionCallHandler() const override;
     InspectorEvaluateHandler evaluateHandler() const override;
     void frontendInitialized() override;
@@ -103,6 +104,12 @@ public:
 private:
     void appendAPIBacktrace(ScriptCallStack&);
 
+    InspectorAgent& ensureInspectorAgent();
+    InspectorDebuggerAgent& ensureDebuggerAgent();
+
+    JSAgentContext jsAgentContext();
+    void createLazyAgents();
+
     JSC::JSGlobalObject& m_globalObject;
     std::unique_ptr<InjectedScriptManager> m_injectedScriptManager;
     std::unique_ptr<JSGlobalObjectConsoleClient> m_consoleClient;
@@ -110,8 +117,10 @@ private:
     JSGlobalObjectScriptDebugServer m_scriptDebugServer;
 
     AgentRegistry m_agents;
-    InspectorAgent* m_inspectorAgent { nullptr };
     InspectorConsoleAgent* m_consoleAgent { nullptr };
+
+    // Lazy, but also on-demand agents.
+    InspectorAgent* m_inspectorAgent { nullptr };
     InspectorDebuggerAgent* m_debuggerAgent { nullptr };
 
     Ref<FrontendRouter> m_frontendRouter;
@@ -124,6 +133,7 @@ private:
     bool m_includeNativeCallStackWithExceptions { true };
     bool m_isAutomaticInspection { false };
     bool m_pauseAfterInitialization { false };
+    bool m_didCreateLazyAgents { false };
 
 #if ENABLE(INSPECTOR_ALTERNATE_DISPATCHERS)
     AugmentableInspectorControllerClient* m_augmentingClient { nullptr };

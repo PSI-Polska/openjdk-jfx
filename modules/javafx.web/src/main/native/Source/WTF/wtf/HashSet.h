@@ -18,8 +18,7 @@
  *
  */
 
-#ifndef WTF_HashSet_h
-#define WTF_HashSet_h
+#pragma once
 
 #include <initializer_list>
 #include <wtf/Forward.h>
@@ -46,8 +45,18 @@ private:
         HashFunctions, ValueTraits, ValueTraits> HashTableType;
 
 public:
+    /*
+     * Since figuring out the entries of an iterator is confusing, here is a cheat sheet:
+     * const KeyType& key = iterator->key;
+     */
     typedef HashTableConstIteratorAdapter<HashTableType, ValueType> iterator;
     typedef HashTableConstIteratorAdapter<HashTableType, ValueType> const_iterator;
+
+    /*
+     * Since figuring out the entries of an AddResult is confusing, here is a cheat sheet:
+     * iterator iter = addResult.iterator;
+     * bool isNewEntry = addResult.isNewEntry;
+     */
     typedef typename HashTableType::AddResult AddResult;
 
     HashSet()
@@ -68,6 +77,8 @@ public:
 
     iterator begin() const;
     iterator end() const;
+
+    iterator random() const { return m_impl.random(); }
 
     iterator find(const ValueType&) const;
     bool contains(const ValueType&) const;
@@ -125,6 +136,8 @@ public:
 
     template<typename OtherCollection>
     bool operator!=(const OtherCollection&) const;
+
+    void checkConsistency() const;
 
 private:
     HashTableType m_impl;
@@ -381,8 +394,12 @@ void HashSet<T, U, V>::add(std::initializer_list<std::reference_wrapper<const Va
         add(value);
 }
 
+template<typename T, typename U, typename V>
+inline void HashSet<T, U, V>::checkConsistency() const
+{
+    m_impl.checkTableConsistency();
+}
+
 } // namespace WTF
 
 using WTF::HashSet;
-
-#endif /* WTF_HashSet_h */

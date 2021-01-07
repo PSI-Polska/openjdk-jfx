@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012, 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,10 +41,8 @@
 namespace JSC {
 
 GCAwareJITStubRoutine::GCAwareJITStubRoutine(
-    const MacroAssemblerCodeRef& code, VM& vm)
+    const MacroAssemblerCodeRef<JITStubRoutinePtrTag>& code, VM& vm)
     : JITStubRoutine(code)
-    , m_mayBeExecuting(false)
-    , m_isJettisoned(false)
 {
     vm.heap.m_jitStubRoutines->add(this);
 }
@@ -82,10 +80,11 @@ void GCAwareJITStubRoutine::markRequiredObjectsInternal(SlotVisitor&)
 }
 
 MarkingGCAwareJITStubRoutine::MarkingGCAwareJITStubRoutine(
-    const MacroAssemblerCodeRef& code, VM& vm, const JSCell* owner,
-    const Vector<JSCell*>& cells)
+    const MacroAssemblerCodeRef<JITStubRoutinePtrTag>& code, VM& vm, const JSCell* owner,
+    const Vector<JSCell*>& cells, Bag<CallLinkInfo>&& callLinkInfos)
     : GCAwareJITStubRoutine(code, vm)
     , m_cells(cells.size())
+    , m_callLinkInfos(WTFMove(callLinkInfos))
 {
     for (unsigned i = cells.size(); i--;)
         m_cells[i].set(vm, owner, cells[i]);
@@ -103,9 +102,9 @@ void MarkingGCAwareJITStubRoutine::markRequiredObjectsInternal(SlotVisitor& visi
 
 
 GCAwareJITStubRoutineWithExceptionHandler::GCAwareJITStubRoutineWithExceptionHandler(
-    const MacroAssemblerCodeRef& code, VM& vm,  const JSCell* owner, const Vector<JSCell*>& cells,
-    CodeBlock* codeBlockForExceptionHandlers, CallSiteIndex exceptionHandlerCallSiteIndex)
-    : MarkingGCAwareJITStubRoutine(code, vm, owner, cells)
+    const MacroAssemblerCodeRef<JITStubRoutinePtrTag>& code, VM& vm,  const JSCell* owner, const Vector<JSCell*>& cells, Bag<CallLinkInfo>&& callLinkInfos,
+    CodeBlock* codeBlockForExceptionHandlers, DisposableCallSiteIndex exceptionHandlerCallSiteIndex)
+    : MarkingGCAwareJITStubRoutine(code, vm, owner, cells, WTFMove(callLinkInfos))
     , m_codeBlockWithExceptionHandler(codeBlockForExceptionHandlers)
     , m_exceptionHandlerCallSiteIndex(exceptionHandlerCallSiteIndex)
 {
@@ -122,7 +121,7 @@ void GCAwareJITStubRoutineWithExceptionHandler::observeZeroRefCount()
 {
 #if ENABLE(DFG_JIT)
     if (m_codeBlockWithExceptionHandler) {
-        m_codeBlockWithExceptionHandler->jitCode()->dfgCommon()->removeCallSiteIndex(m_exceptionHandlerCallSiteIndex);
+        m_codeBlockWithExceptionHandler->jitCode()->dfgCommon()->removeDisposableCallSiteIndex(m_exceptionHandlerCallSiteIndex);
         m_codeBlockWithExceptionHandler->removeExceptionHandlerForCallSite(m_exceptionHandlerCallSiteIndex);
         m_codeBlockWithExceptionHandler = nullptr;
     }
@@ -133,26 +132,30 @@ void GCAwareJITStubRoutineWithExceptionHandler::observeZeroRefCount()
 
 
 Ref<JITStubRoutine> createJITStubRoutine(
-    const MacroAssemblerCodeRef& code,
+    const MacroAssemblerCodeRef<JITStubRoutinePtrTag>& code,
     VM& vm,
     const JSCell* owner,
     bool makesCalls,
     const Vector<JSCell*>& cells,
+    Bag<CallLinkInfo>&& callLinkInfos,
     CodeBlock* codeBlockForExceptionHandlers,
-    CallSiteIndex exceptionHandlerCallSiteIndex)
+    DisposableCallSiteIndex exceptionHandlerCallSiteIndex)
 {
-    if (!makesCalls)
+    if (!makesCalls) {
+        // Allocating CallLinkInfos means we should have calls.
+        ASSERT(callLinkInfos.isEmpty());
         return adoptRef(*new JITStubRoutine(code));
+    }
 
     if (codeBlockForExceptionHandlers) {
         RELEASE_ASSERT(JITCode::isOptimizingJIT(codeBlockForExceptionHandlers->jitType()));
-        return adoptRef(*new GCAwareJITStubRoutineWithExceptionHandler(code, vm, owner, cells, codeBlockForExceptionHandlers, exceptionHandlerCallSiteIndex));
+        return adoptRef(*new GCAwareJITStubRoutineWithExceptionHandler(code, vm, owner, cells, WTFMove(callLinkInfos), codeBlockForExceptionHandlers, exceptionHandlerCallSiteIndex));
     }
 
-    if (cells.isEmpty())
-        return adoptRef(*new GCAwareJITStubRoutine(code, vm));
+    if (cells.isEmpty() && callLinkInfos.isEmpty())
+        return GCAwareJITStubRoutine::create(code, vm);
 
-    return adoptRef(*new MarkingGCAwareJITStubRoutine(code, vm, owner, cells));
+    return adoptRef(*new MarkingGCAwareJITStubRoutine(code, vm, owner, cells, WTFMove(callLinkInfos)));
 }
 
 } // namespace JSC

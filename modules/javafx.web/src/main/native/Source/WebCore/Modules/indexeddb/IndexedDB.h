@@ -27,6 +27,8 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
+#include <wtf/EnumTraits.h>
+
 namespace WebCore {
 
 namespace IndexedDB {
@@ -102,8 +104,28 @@ enum class GetAllType {
     Values,
 };
 
+enum class ConnectionClosedOnBehalfOfServer : bool { No, Yes };
+
+enum class CursorIterateOption {
+    DoNotReply,
+    Reply,
+};
+
 } // namespace IndexedDB
 
 } // namespace WebCore
+
+namespace WTF {
+
+template<> struct EnumTraits<WebCore::IndexedDB::ObjectStoreOverwriteMode> {
+    using values = EnumValues<
+        WebCore::IndexedDB::ObjectStoreOverwriteMode,
+        WebCore::IndexedDB::ObjectStoreOverwriteMode::Overwrite,
+        WebCore::IndexedDB::ObjectStoreOverwriteMode::OverwriteForCursor,
+        WebCore::IndexedDB::ObjectStoreOverwriteMode::NoOverwrite
+    >;
+};
+
+}
 
 #endif // ENABLED(INDEXED_DATABASE)

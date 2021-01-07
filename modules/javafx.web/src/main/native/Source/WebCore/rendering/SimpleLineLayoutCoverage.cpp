@@ -135,9 +135,6 @@ static void printReason(AvoidanceReason reason, TextStream& stream)
     case FlowHasNonAutoLineBreak:
         stream << "line-break is not auto";
         break;
-    case FlowHasNonAutoTrailingWord:
-        stream << "-apple-trailing-word is not auto";
-        break;
     case FlowHasSVGFont:
         stream << "SVG font";
         break;
@@ -193,7 +190,10 @@ static void printReason(AvoidanceReason reason, TextStream& stream)
         stream << "column with vertical-align != baseline";
         break;
     case MultiColumnFlowIsFloating:
-        stream << "column with floating objecgts";
+        stream << "column with floating objects";
+        break;
+    case FlowIncludesDocumentMarkers:
+        stream << "text includes document markers";
         break;
     case FlowTextIsEmpty:
     case FlowHasNoChild:
@@ -269,7 +269,7 @@ static void collectNonEmptyLeafRenderBlockFlows(const RenderObject& renderer, Ha
 static void collectNonEmptyLeafRenderBlockFlowsForCurrentPage(HashSet<const RenderBlockFlow*>& leafRenderers)
 {
     for (const auto* document : Document::allDocuments()) {
-        if (!document->renderView() || document->pageCacheState() != Document::NotInPageCache)
+        if (!document->renderView() || document->backForwardCacheState() != Document::NotInBackForwardCache)
             continue;
         if (!document->isHTMLDocument() && !document->isXHTMLDocument())
             continue;

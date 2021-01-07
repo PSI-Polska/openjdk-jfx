@@ -39,13 +39,14 @@
 
 namespace WebCore {
 
+class PerformanceServerTiming;
 class ResourceTiming;
 
 class PerformanceResourceTiming final : public PerformanceEntry {
 public:
     static Ref<PerformanceResourceTiming> create(MonotonicTime timeOrigin, ResourceTiming&&);
 
-    AtomicString initiatorType() const { return m_initiatorType; }
+    AtomString initiatorType() const { return m_initiatorType; }
     String nextHopProtocol() const;
 
     double workerStart() const;
@@ -60,6 +61,7 @@ public:
     double requestStart() const;
     double responseStart() const;
     double responseEnd() const;
+    const Vector<Ref<PerformanceServerTiming>>& serverTiming() const { return m_serverTiming; }
 
 private:
     PerformanceResourceTiming(MonotonicTime timeOrigin, ResourceTiming&&);
@@ -67,11 +69,12 @@ private:
 
     double networkLoadTimeToDOMHighResTimeStamp(Seconds) const;
 
-    AtomicString m_initiatorType;
+    AtomString m_initiatorType;
     MonotonicTime m_timeOrigin;
     LoadTiming m_loadTiming;
     NetworkLoadMetrics m_networkLoadMetrics;
     bool m_shouldReportDetails;
+    Vector<Ref<PerformanceServerTiming>> m_serverTiming;
 };
 
 } // namespace WebCore

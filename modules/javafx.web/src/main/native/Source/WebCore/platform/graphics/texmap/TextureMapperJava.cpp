@@ -75,7 +75,7 @@ void TextureMapperJava::drawTexture(const BitmapTexture& texture, const FloatRec
     const BitmapTextureJava& textureImageBuffer = static_cast<const BitmapTextureJava&>(texture);
     ImageBuffer* image = textureImageBuffer.image();
     context->save();
-    context->setCompositeOperation(isInMaskMode() ? CompositeDestinationIn : CompositeSourceOver);
+    context->setCompositeOperation(isInMaskMode() ? CompositeOperator::DestinationIn : CompositeOperator::SourceOver);
     context->setAlpha(opacity);
     context->platformContext()->rq().freeSpace(68)
         << (jint)com_sun_webkit_graphics_GraphicsDecoder_SET_PERSPECTIVE_TRANSFORM
@@ -87,14 +87,14 @@ void TextureMapperJava::drawTexture(const BitmapTexture& texture, const FloatRec
     context->restore();
 }
 
-void TextureMapperJava::drawSolidColor(const FloatRect& rect, const TransformationMatrix& transform, const Color& color)
+void TextureMapperJava::drawSolidColor(const FloatRect& rect, const TransformationMatrix& transform, const Color& color, bool)
 {
     GraphicsContext* context = currentContext();
     if (!context)
         return;
 
     context->save();
-    context->setCompositeOperation(isInMaskMode() ? CompositeDestinationIn : CompositeSourceOver);
+    context->setCompositeOperation(isInMaskMode() ? CompositeOperator::DestinationIn : CompositeOperator::SourceOver);
     context->platformContext()->rq().freeSpace(68)
         << (jint)com_sun_webkit_graphics_GraphicsDecoder_SET_PERSPECTIVE_TRANSFORM
         << (float)transform.m11() << (float)transform.m12() << (float)transform.m13() << (float)transform.m14()

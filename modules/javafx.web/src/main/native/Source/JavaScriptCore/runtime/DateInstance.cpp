@@ -28,14 +28,12 @@
 #include <math.h>
 #include <wtf/MathExtras.h>
 
-using namespace WTF;
-
 namespace JSC {
 
-const ClassInfo DateInstance::s_info = {"Date", &JSWrapperObject::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(DateInstance)};
+const ClassInfo DateInstance::s_info = {"Date", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(DateInstance)};
 
 DateInstance::DateInstance(VM& vm, Structure* structure)
-    : JSWrapperObject(vm, structure)
+    : Base(vm, structure)
 {
 }
 
@@ -43,28 +41,21 @@ void DateInstance::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     ASSERT(inherits(vm, info()));
-    setInternalValue(vm, jsNaN());
 }
 
 void DateInstance::finishCreation(VM& vm, double time)
 {
     Base::finishCreation(vm);
     ASSERT(inherits(vm, info()));
-    setInternalValue(vm, jsNumber(timeClip(time)));
+    m_internalNumber = timeClip(time);
 }
 
-void DateInstance::destroy(JSCell* cell)
-{
-    static_cast<DateInstance*>(cell)->DateInstance::~DateInstance();
-}
-
-const GregorianDateTime* DateInstance::calculateGregorianDateTime(ExecState* exec) const
+const GregorianDateTime* DateInstance::calculateGregorianDateTime(VM& vm) const
 {
     double milli = internalNumber();
     if (std::isnan(milli))
-        return 0;
+        return nullptr;
 
-    VM& vm = exec->vm();
     if (!m_data)
         m_data = vm.dateInstanceCache.add(milli);
 
@@ -75,13 +66,12 @@ const GregorianDateTime* DateInstance::calculateGregorianDateTime(ExecState* exe
     return &m_data->m_cachedGregorianDateTime;
 }
 
-const GregorianDateTime* DateInstance::calculateGregorianDateTimeUTC(ExecState* exec) const
+const GregorianDateTime* DateInstance::calculateGregorianDateTimeUTC(VM& vm) const
 {
     double milli = internalNumber();
     if (std::isnan(milli))
-        return 0;
+        return nullptr;
 
-    VM& vm = exec->vm();
     if (!m_data)
         m_data = vm.dateInstanceCache.add(milli);
 

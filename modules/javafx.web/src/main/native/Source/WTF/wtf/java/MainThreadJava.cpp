@@ -6,6 +6,7 @@
 #include <wtf/java/JavaEnv.h>
 #include <wtf/java/JavaRef.h>
 #include <wtf/MainThread.h>
+#include <wtf/RunLoop.h>
 
 namespace WTF {
 void scheduleDispatchFunctionsOnMainThread()
@@ -22,11 +23,37 @@ void scheduleDispatchFunctionsOnMainThread()
     ASSERT(mid);
 
     env->CallStaticVoidMethod(jMainThreadCls, mid);
-    CheckAndClearException(env);
+    WTF::CheckAndClearException(env);
 }
 
 void initializeMainThreadPlatform()
 {
+#if OS(WINDOWS)
+    RunLoop::registerRunLoopMessageWindowClass();
+#endif
+}
+
+bool isMainThreadIfInitialized()
+{
+    return isMainThread();
+}
+
+bool isMainThread()
+{
+    AttachThreadAsNonDaemonToJavaEnv autoAttach;
+    JNIEnv* env = autoAttach.env();
+    static JGClass jMainThreadCls(env->FindClass("com/sun/webkit/MainThread"));
+
+    static jmethodID mid = env->GetStaticMethodID(
+            jMainThreadCls,
+            "fwkIsMainThread",
+            "()Z");
+
+    ASSERT(mid);
+
+    jboolean isMainThread = env->CallStaticBooleanMethod(jMainThreadCls, mid);
+    WTF::CheckAndClearException(env);
+    return isMainThread == JNI_TRUE;
 }
 
 extern "C" {

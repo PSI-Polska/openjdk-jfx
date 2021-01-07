@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005, 2006, 2007, 2008, 2011, 2012, 2013 Apple Inc. All rights reserved.
+ * Copyright (C) 2005-2019 Apple Inc. All rights reserved.
  * Copyright (C) 2011, Benjamin Poulain <ikipou@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -45,7 +45,7 @@ template<typename ValueArg> struct ListHashSetNode;
 template<typename HashArg> struct ListHashSetNodeHashFunctions;
 template<typename HashArg> struct ListHashSetTranslator;
 
-template<typename ValueArg, typename HashArg = typename DefaultHash<ValueArg>::Hash> class ListHashSet {
+template<typename ValueArg, typename HashArg = typename DefaultHash<ValueArg>::Hash> class ListHashSet final {
     WTF_MAKE_FAST_ALLOCATED;
 private:
     typedef ListHashSetNode<ValueArg> Node;
@@ -87,6 +87,9 @@ public:
     const_iterator begin() const { return makeConstIterator(m_head); }
     const_iterator end() const { return makeConstIterator(nullptr); }
 
+    iterator random() { return makeIterator(m_impl.random()); }
+    const_iterator random() const { return makeIterator(m_impl.random()); }
+
     reverse_iterator rbegin() { return reverse_iterator(end()); }
     reverse_iterator rend() { return reverse_iterator(begin()); }
     const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
@@ -109,11 +112,9 @@ public:
     // An alternate version of find() that finds the object by hashing and comparing
     // with some other type, to avoid the cost of type conversion.
     // The HashTranslator interface is defined in HashSet.
-    // FIXME: We should reverse the order of the template arguments so that callers
-    // can just pass the translator let the compiler deduce T.
-    template<typename T, typename HashTranslator> iterator find(const T&);
-    template<typename T, typename HashTranslator> const_iterator find(const T&) const;
-    template<typename T, typename HashTranslator> bool contains(const T&) const;
+    template<typename HashTranslator, typename T> iterator find(const T&);
+    template<typename HashTranslator, typename T> const_iterator find(const T&) const;
+    template<typename HashTranslator, typename T> bool contains(const T&) const;
 
     // The return value of add is a pair of an iterator to the new value's location,
     // and a bool that is true if an new entry was added.
@@ -138,6 +139,14 @@ public:
     bool remove(const ValueType&);
     bool remove(iterator);
     void clear();
+
+    // Overloads for smart pointer values that take the raw pointer type as the parameter.
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, iterator>::type find(typename GetPtrHelper<V>::PtrType);
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, const_iterator>::type find(typename GetPtrHelper<V>::PtrType) const;
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, bool>::type contains(typename GetPtrHelper<V>::PtrType) const;
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, AddResult>::type insertBefore(typename GetPtrHelper<V>::PtrType, const ValueType&);
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, AddResult>::type insertBefore(typename GetPtrHelper<V>::PtrType, ValueType&&);
+    template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value, bool>::type remove(typename GetPtrHelper<V>::PtrType);
 
 private:
     void unlink(Node*);
@@ -172,10 +181,11 @@ public:
 template<typename HashArg> struct ListHashSetNodeHashFunctions {
     template<typename T> static unsigned hash(const T& key) { return HashArg::hash(key->m_value); }
     template<typename T> static bool equal(const T& a, const T& b) { return HashArg::equal(a->m_value, b->m_value); }
-    static const bool safeToCompareToEmptyOrDeleted = false;
+    static constexpr bool safeToCompareToEmptyOrDeleted = false;
 };
 
 template<typename ValueArg, typename HashArg> class ListHashSetIterator {
+    WTF_MAKE_FAST_ALLOCATED;
 private:
     typedef ListHashSet<ValueArg, HashArg> ListHashSetType;
     typedef ListHashSetIterator<ValueArg, HashArg> iterator;
@@ -223,6 +233,7 @@ private:
 };
 
 template<typename ValueArg, typename HashArg> class ListHashSetConstIterator {
+    WTF_MAKE_FAST_ALLOCATED;
 private:
     typedef ListHashSet<ValueArg, HashArg> ListHashSetType;
     typedef ListHashSetIterator<ValueArg, HashArg> iterator;
@@ -469,7 +480,7 @@ struct ListHashSetTranslatorAdapter {
 };
 
 template<typename ValueType, typename U>
-template<typename T, typename HashTranslator>
+template<typename HashTranslator, typename T>
 inline auto ListHashSet<ValueType, U>::find(const T& value) -> iterator
 {
     auto it = m_impl.template find<ListHashSetTranslatorAdapter<HashTranslator>>(value);
@@ -479,7 +490,7 @@ inline auto ListHashSet<ValueType, U>::find(const T& value) -> iterator
 }
 
 template<typename ValueType, typename U>
-template<typename T, typename HashTranslator>
+template<typename HashTranslator, typename T>
 inline auto ListHashSet<ValueType, U>::find(const T& value) const -> const_iterator
 {
     auto it = m_impl.template find<ListHashSetTranslatorAdapter<HashTranslator>>(value);
@@ -489,7 +500,7 @@ inline auto ListHashSet<ValueType, U>::find(const T& value) const -> const_itera
 }
 
 template<typename ValueType, typename U>
-template<typename T, typename HashTranslator>
+template<typename HashTranslator, typename T>
 inline bool ListHashSet<ValueType, U>::contains(const T& value) const
 {
     return m_impl.template contains<ListHashSetTranslatorAdapter<HashTranslator>>(value);
@@ -620,6 +631,54 @@ inline void ListHashSet<T, U>::clear()
     m_impl.clear();
     m_head = nullptr;
     m_tail = nullptr;
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::find(typename GetPtrHelper<V>::PtrType value) -> typename std::enable_if<IsSmartPtr<V>::value, iterator>::type
+{
+    auto it = m_impl.template find<BaseTranslator>(value);
+    if (it == m_impl.end())
+        return end();
+    return makeIterator(*it);
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::find(typename GetPtrHelper<V>::PtrType value) const -> typename std::enable_if<IsSmartPtr<V>::value, const_iterator>::type
+{
+    auto it = m_impl.template find<BaseTranslator>(value);
+    if (it == m_impl.end())
+        return end();
+    return makeConstIterator(*it);
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::contains(typename GetPtrHelper<V>::PtrType value) const -> typename std::enable_if<IsSmartPtr<V>::value, bool>::type
+{
+    return m_impl.template contains<BaseTranslator>(value);
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::insertBefore(typename GetPtrHelper<V>::PtrType beforeValue, const ValueType& newValue) -> typename std::enable_if<IsSmartPtr<V>::value, AddResult>::type
+{
+    return insertBefore(find(beforeValue), newValue);
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::insertBefore(typename GetPtrHelper<V>::PtrType beforeValue, ValueType&& newValue) -> typename std::enable_if<IsSmartPtr<V>::value, AddResult>::type
+{
+    return insertBefore(find(beforeValue), WTFMove(newValue));
+}
+
+template<typename T, typename U>
+template<typename V>
+inline auto ListHashSet<T, U>::remove(typename GetPtrHelper<V>::PtrType value) -> typename std::enable_if<IsSmartPtr<V>::value, bool>::type
+{
+    return remove(find(value));
 }
 
 template<typename T, typename U>

@@ -32,7 +32,7 @@
 
 #include "BlobResourceHandle.h"
 #include "FileError.h"
-#include "URL.h"
+#include <wtf/URL.h>
 #include "TextEncoding.h"
 #include "ThreadableLoaderClient.h"
 #include <wtf/Forward.h>
@@ -61,11 +61,11 @@ public:
     };
 
     // If client is given, do the loading asynchronously. Otherwise, load synchronously.
-    FileReaderLoader(ReadType, FileReaderLoaderClient*);
+    WEBCORE_EXPORT FileReaderLoader(ReadType, FileReaderLoaderClient*);
     ~FileReaderLoader();
 
-    void start(ScriptExecutionContext*, Blob&);
-    void cancel();
+    WEBCORE_EXPORT void start(ScriptExecutionContext*, Blob&);
+    WEBCORE_EXPORT void cancel();
 
     // ThreadableLoaderClient
     void didReceiveResponse(unsigned long, const ResourceResponse&) override;
@@ -74,13 +74,15 @@ public:
     void didFail(const ResourceError&) override;
 
     String stringResult();
-    RefPtr<JSC::ArrayBuffer> arrayBufferResult() const;
+    WEBCORE_EXPORT RefPtr<JSC::ArrayBuffer> arrayBufferResult() const;
     unsigned bytesLoaded() const { return m_bytesLoaded; }
     unsigned totalBytes() const { return m_totalBytes; }
     FileError::ErrorCode errorCode() const { return m_errorCode; }
 
     void setEncoding(const String&);
     void setDataType(const String& dataType) { m_dataType = dataType; }
+
+    const URL& url() { return m_urlForReading; }
 
 private:
     void terminate();

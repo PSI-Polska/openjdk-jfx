@@ -27,20 +27,23 @@
 
 #if ENABLE(SERVICE_WORKER)
 
+#include "ClientOrigin.h"
+#include "ContentSecurityPolicyResponseHeaders.h"
+#include "RegistrableDomain.h"
 #include "ServiceWorkerClientData.h"
+#include "ServiceWorkerContextData.h"
 #include "ServiceWorkerData.h"
 #include "ServiceWorkerIdentifier.h"
 #include "ServiceWorkerRegistrationKey.h"
 #include "ServiceWorkerTypes.h"
-#include "URL.h"
 #include <wtf/RefCounted.h>
+#include <wtf/WeakPtr.h>
 
 namespace WebCore {
 
-struct ClientOrigin;
 class SWServer;
 class SWServerRegistration;
-struct ServiceWorkerClientData;
+class SWServerToContextConnection;
 struct ServiceWorkerClientIdentifier;
 struct ServiceWorkerClientQueryOptions;
 struct ServiceWorkerContextData;
@@ -59,7 +62,7 @@ public:
 
     void terminate();
 
-    WEBCORE_EXPORT void whenActivated(WTF::Function<void(bool)>&&);
+    WEBCORE_EXPORT void whenActivated(CompletionHandler<void(bool)>&&);
 
     enum class State {
         Running,
@@ -70,7 +73,7 @@ public:
     bool isTerminating() const { return m_state == State::Terminating; }
     void setState(State);
 
-    SWServer& server() { return m_server; }
+    SWServer* server() { return m_server.get(); }
     const ServiceWorkerRegistrationKey& registrationKey() const { return m_registrationKey; }
     const URL& scriptURL() const { return m_data.scriptURL; }
     const String& script() const { return m_script; }
@@ -78,49 +81,66 @@ public:
 
     ServiceWorkerIdentifier identifier() const { return m_data.identifier; }
 
-    std::optional<SWServerToContextConnectionIdentifier> contextConnectionIdentifier() const { return m_contextConnectionIdentifier; }
-    void setContextConnectionIdentifier(std::optional<SWServerToContextConnectionIdentifier> identifier) { m_contextConnectionIdentifier = identifier; }
-
     ServiceWorkerState state() const { return m_data.state; }
     void setState(ServiceWorkerState);
 
     bool hasPendingEvents() const { return m_hasPendingEvents; }
     void setHasPendingEvents(bool);
 
-    void scriptContextFailedToStart(const std::optional<ServiceWorkerJobDataIdentifier>&, const String& message);
-    void scriptContextStarted(const std::optional<ServiceWorkerJobDataIdentifier>&);
-    void didFinishInstall(const std::optional<ServiceWorkerJobDataIdentifier>&, bool wasSuccessful);
+    void scriptContextFailedToStart(const Optional<ServiceWorkerJobDataIdentifier>&, const String& message);
+    void scriptContextStarted(const Optional<ServiceWorkerJobDataIdentifier>&, bool doesHandleFetch);
+    void didFinishInstall(const Optional<ServiceWorkerJobDataIdentifier>&, bool wasSuccessful);
     void didFinishActivation();
     void contextTerminated();
-    WEBCORE_EXPORT std::optional<ServiceWorkerClientData> findClientByIdentifier(const ServiceWorkerClientIdentifier&) const;
+    WEBCORE_EXPORT Optional<ServiceWorkerClientData> findClientByIdentifier(const ServiceWorkerClientIdentifier&) const;
     void matchAll(const ServiceWorkerClientQueryOptions&, ServiceWorkerClientsMatchAllCallback&&);
     void claim();
+    void setScriptResource(URL&&, ServiceWorkerContextData::ImportedScript&&);
 
     void skipWaiting();
     bool isSkipWaitingFlagSet() const { return m_isSkipWaitingFlagSet; }
 
     WEBCORE_EXPORT static SWServerWorker* existingWorkerForIdentifier(ServiceWorkerIdentifier);
+    static HashMap<ServiceWorkerIdentifier, SWServerWorker*>& allWorkers();
 
     const ServiceWorkerData& data() const { return m_data; }
     ServiceWorkerContextData contextData() const;
+
     const ClientOrigin& origin() const;
+    const RegistrableDomain& registrableDomain() const { return m_registrableDomain; }
+
+    WEBCORE_EXPORT SWServerToContextConnection* contextConnection();
+    String userAgent() const;
+
+    bool shouldSkipFetchEvent() const { return m_shouldSkipHandleFetch; }
+
+    SWServerRegistration* registration() const;
+
+    void setHasTimedOutAnyFetchTasks() { m_hasTimedOutAnyFetchTasks = true; }
+    bool hasTimedOutAnyFetchTasks() const { return m_hasTimedOutAnyFetchTasks; }
+    void didFailHeartBeatCheck();
 
 private:
-    SWServerWorker(SWServer&, SWServerRegistration&, std::optional<SWServerToContextConnectionIdentifier>, const URL&, const String& script, const ContentSecurityPolicyResponseHeaders&,  WorkerType, ServiceWorkerIdentifier);
+    SWServerWorker(SWServer&, SWServerRegistration&, const URL&, const String& script, const ContentSecurityPolicyResponseHeaders&, String&& referrerPolicy, WorkerType, ServiceWorkerIdentifier, HashMap<URL, ServiceWorkerContextData::ImportedScript>&&);
 
     void callWhenActivatedHandler(bool success);
 
-    SWServer& m_server;
+    WeakPtr<SWServer> m_server;
     ServiceWorkerRegistrationKey m_registrationKey;
-    std::optional<SWServerToContextConnectionIdentifier> m_contextConnectionIdentifier;
+    WeakPtr<SWServerRegistration> m_registration;
     ServiceWorkerData m_data;
     String m_script;
     ContentSecurityPolicyResponseHeaders m_contentSecurityPolicy;
+    String m_referrerPolicy;
     bool m_hasPendingEvents { false };
     State m_state { State::NotRunning };
-    mutable std::optional<ClientOrigin> m_origin;
+    mutable Optional<ClientOrigin> m_origin;
+    RegistrableDomain m_registrableDomain;
     bool m_isSkipWaitingFlagSet { false };
-    Vector<WTF::Function<void(bool)>> m_whenActivatedHandlers;
+    Vector<CompletionHandler<void(bool)>> m_whenActivatedHandlers;
+    HashMap<URL, ServiceWorkerContextData::ImportedScript> m_scriptResourceMap;
+    bool m_shouldSkipHandleFetch;
+    bool m_hasTimedOutAnyFetchTasks { false };
 };
 
 } // namespace WebCore

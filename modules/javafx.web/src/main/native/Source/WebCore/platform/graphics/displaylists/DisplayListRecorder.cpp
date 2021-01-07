@@ -36,12 +36,12 @@
 namespace WebCore {
 namespace DisplayList {
 
-Recorder::Recorder(GraphicsContext& context, DisplayList& displayList, const FloatRect& initialClip, const AffineTransform& baseCTM)
+Recorder::Recorder(GraphicsContext& context, DisplayList& displayList, const GraphicsContextState& state, const FloatRect& initialClip, const AffineTransform& baseCTM)
     : GraphicsContextImpl(context, initialClip, baseCTM)
     , m_displayList(displayList)
 {
     LOG_WITH_STREAM(DisplayLists, stream << "\nRecording with clip " << initialClip);
-    m_stateStack.append(ContextState(baseCTM, initialClip));
+    m_stateStack.append(ContextState(state, baseCTM, initialClip));
 }
 
 Recorder::~Recorder()
@@ -62,7 +62,7 @@ void Recorder::willAppendItem(const Item& item)
         if (changesFromLastState) {
             LOG_WITH_STREAM(DisplayLists, stream << "pre-drawing, saving state " << GraphicsContextStateChange(stateChanges.m_state, changesFromLastState));
             m_displayList.append(SetState::create(stateChanges.m_state, changesFromLastState));
-            stateChanges.m_changeFlags = 0;
+            stateChanges.m_changeFlags = { };
             currentState().lastDrawingState = stateChanges.m_state;
         }
         currentState().wasUsedForDrawing = true;
@@ -126,17 +126,17 @@ ImageDrawResult Recorder::drawTiledImage(Image& image, const FloatRect& destinat
     return ImageDrawResult::DidRecord;
 }
 
-#if USE(CG) || USE(CAIRO)
-void Recorder::drawNativeImage(const NativeImagePtr& image, const FloatSize& imageSize, const FloatRect& destRect, const FloatRect& srcRect, CompositeOperator op, BlendMode blendMode, ImageOrientation orientation)
+#if USE(CG) || USE(CAIRO) || USE(DIRECT2D)
+void Recorder::drawNativeImage(const NativeImagePtr& image, const FloatSize& imageSize, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions& options)
 {
-    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawNativeImage::create(image, imageSize, destRect, srcRect, op, blendMode, orientation)));
+    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawNativeImage::create(image, imageSize, destRect, srcRect, options)));
     updateItemExtent(newItem);
 }
 #endif
 
-void Recorder::drawPattern(Image& image, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform& patternTransform, const FloatPoint& phase, const FloatSize& spacing, CompositeOperator op, BlendMode blendMode)
+void Recorder::drawPattern(Image& image, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform& patternTransform, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions& options)
 {
-    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawPattern::create(image, destRect, tileRect, patternTransform, phase, spacing, op, blendMode)));
+    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawPattern::create(image, destRect, tileRect, patternTransform, phase, spacing, options)));
     updateItemExtent(newItem);
 }
 
@@ -196,15 +196,16 @@ void Recorder::concatCTM(const AffineTransform& transform)
     appendItem(ConcatenateCTM::create(transform));
 }
 
-void Recorder::setCTM(const AffineTransform&)
+void Recorder::setCTM(const AffineTransform& transform)
 {
-    WTFLogAlways("GraphicsContext::setCTM() is not compatible with DisplayList::Recorder.");
+    currentState().setCTM(transform);
+    appendItem(SetCTM::create(transform));
 }
 
 AffineTransform Recorder::getCTM(GraphicsContext::IncludeDeviceScale)
 {
-    WTFLogAlways("GraphicsContext::getCTM() is not yet compatible with DisplayList::Recorder.");
-    return { };
+    // FIXME: Respect the given value of IncludeDeviceScale.
+    return currentState().ctm;
 }
 
 void Recorder::beginTransparencyLayer(float opacity)
@@ -230,15 +231,15 @@ void Recorder::drawLine(const FloatPoint& point1, const FloatPoint& point2)
     updateItemExtent(newItem);
 }
 
-void Recorder::drawLinesForText(const FloatPoint& point, const DashArray& widths, bool printing, bool doubleLines, float strokeThickness)
+void Recorder::drawLinesForText(const FloatPoint& point, float thickness, const DashArray& widths, bool printing, bool doubleLines)
 {
-    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawLinesForText::create(FloatPoint(), toFloatSize(point), widths, printing, doubleLines, strokeThickness)));
+    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawLinesForText::create(FloatPoint(), toFloatSize(point), thickness, widths, printing, doubleLines)));
     updateItemExtent(newItem);
 }
 
-void Recorder::drawLineForDocumentMarker(const FloatPoint& point, float width, GraphicsContext::DocumentMarkerLineStyle style)
+void Recorder::drawDotsForDocumentMarker(const FloatRect& rect, DocumentMarkerLineStyle style)
 {
-    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawLineForDocumentMarker::create(point, width, style)));
+    DrawingItem& newItem = downcast<DrawingItem>(appendItem(DrawDotsForDocumentMarker::create(rect, style)));
     updateItemExtent(newItem);
 }
 
@@ -378,6 +379,11 @@ IntRect Recorder::clipBounds()
     return IntRect(-2048, -2048, 4096, 4096);
 }
 
+void Recorder::clipToImageBuffer(ImageBuffer&, const FloatRect&)
+{
+    WTFLogAlways("GraphicsContext::clipToImageBuffer is not compatible with DisplayList::Recorder.");
+}
+
 void Recorder::applyDeviceScaleFactor(float deviceScaleFactor)
 {
     // FIXME: this changes the baseCTM, which will invalidate all of our cached extents.
@@ -399,7 +405,7 @@ Item& Recorder::appendItem(Ref<Item>&& item)
 
 void Recorder::updateItemExtent(DrawingItem& item) const
 {
-    if (std::optional<FloatRect> rect = item.localBounds(graphicsContext()))
+    if (Optional<FloatRect> rect = item.localBounds(graphicsContext()))
         item.setExtent(extentFromLocalBounds(rect.value()));
 }
 
@@ -468,7 +474,7 @@ void Recorder::ContextState::rotate(float angleInRadians)
     AffineTransform rotation;
     rotation.rotate(angleInDegrees);
 
-    if (std::optional<AffineTransform> inverse = rotation.inverse())
+    if (Optional<AffineTransform> inverse = rotation.inverse())
         clipBounds = inverse.value().mapRect(clipBounds);
 }
 
@@ -478,11 +484,23 @@ void Recorder::ContextState::scale(const FloatSize& size)
     clipBounds.scale(1 / size.width(), 1 / size.height());
 }
 
+void Recorder::ContextState::setCTM(const AffineTransform& matrix)
+{
+    Optional<AffineTransform> inverseTransformForClipBounds;
+    if (auto originalCTMInverse = ctm.inverse())
+        inverseTransformForClipBounds = originalCTMInverse->multiply(matrix).inverse();
+
+    ctm = matrix;
+
+    if (inverseTransformForClipBounds)
+        clipBounds = inverseTransformForClipBounds->mapRect(clipBounds);
+}
+
 void Recorder::ContextState::concatCTM(const AffineTransform& matrix)
 {
     ctm *= matrix;
 
-    if (std::optional<AffineTransform> inverse = matrix.inverse())
+    if (Optional<AffineTransform> inverse = matrix.inverse())
         clipBounds = inverse.value().mapRect(clipBounds);
 }
 

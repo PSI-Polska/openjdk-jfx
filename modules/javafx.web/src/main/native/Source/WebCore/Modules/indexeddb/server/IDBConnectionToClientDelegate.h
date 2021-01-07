@@ -27,13 +27,13 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
+#include "IDBResourceIdentifier.h"
 #include <wtf/Forward.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
 class IDBError;
-class IDBResourceIdentifier;
 class IDBResultData;
 
 namespace IDBServer {
@@ -44,7 +44,7 @@ class IDBConnectionToClientDelegate {
 public:
     virtual ~IDBConnectionToClientDelegate() = default;
 
-    virtual uint64_t identifier() const = 0;
+    virtual IDBConnectionIdentifier identifier() const = 0;
 
     virtual void didDeleteDatabase(const IDBResultData&) = 0;
     virtual void didOpenDatabase(const IDBResultData&) = 0;
@@ -71,9 +71,6 @@ public:
     virtual void notifyOpenDBRequestBlocked(const IDBResourceIdentifier& requestIdentifier, uint64_t oldVersion, uint64_t newVersion) = 0;
 
     virtual void didGetAllDatabaseNames(uint64_t callbackID, const Vector<String>& databaseNames) = 0;
-
-    virtual void ref() = 0;
-    virtual void deref() = 0;
 };
 
 } // namespace IDBServer

@@ -24,7 +24,7 @@
 
 namespace JSC {
 
-class MathObject : public JSNonFinalObject {
+class MathObject final : public JSNonFinalObject {
 private:
     MathObject(VM&, Structure*);
 
@@ -49,8 +49,8 @@ protected:
     void finishCreation(VM&, JSGlobalObject*);
 };
 
-EncodedJSValue JSC_HOST_CALL mathProtoFuncAbs(ExecState*);
-EncodedJSValue JSC_HOST_CALL mathProtoFuncFloor(ExecState*);
-EncodedJSValue JSC_HOST_CALL mathProtoFuncTrunc(ExecState*);
+EncodedJSValue JSC_HOST_CALL mathProtoFuncAbs(JSGlobalObject*, CallFrame*);
+EncodedJSValue JSC_HOST_CALL mathProtoFuncFloor(JSGlobalObject*, CallFrame*);
+EncodedJSValue JSC_HOST_CALL mathProtoFuncTrunc(JSGlobalObject*, CallFrame*);
 
 } // namespace JSC

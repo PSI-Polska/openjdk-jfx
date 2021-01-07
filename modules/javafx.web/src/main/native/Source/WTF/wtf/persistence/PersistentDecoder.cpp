@@ -24,7 +24,7 @@
  */
 
 #include "config.h"
-#include "PersistentDecoder.h"
+#include <wtf/persistence/PersistentDecoder.h>
 
 #include <wtf/persistence/PersistentEncoder.h>
 
@@ -83,6 +83,11 @@ bool Decoder::decode(uint8_t& result)
 }
 
 bool Decoder::decode(uint16_t& result)
+{
+    return decodeNumber(result);
+}
+
+bool Decoder::decode(int16_t& result)
 {
     return decodeNumber(result);
 }

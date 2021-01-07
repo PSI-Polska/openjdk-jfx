@@ -31,6 +31,7 @@
 #include "CSSAnimationController.h"
 #include "Editing.h"
 #include "FloatQuad.h"
+#include "Frame.h"
 #include "FrameSelection.h"
 #include "FrameView.h"
 #include "GeometryUtilities.h"
@@ -41,7 +42,6 @@
 #include "HTMLTableElement.h"
 #include "HitTestResult.h"
 #include "LogicalSelectionOffsetCaches.h"
-#include "MainFrame.h"
 #include "Page.h"
 #include "PseudoElement.h"
 #include "RenderChildIterator.h"
@@ -52,6 +52,7 @@
 #include "RenderIterator.h"
 #include "RenderLayer.h"
 #include "RenderLayerBacking.h"
+#include "RenderLayerCompositor.h"
 #include "RenderMultiColumnFlow.h"
 #include "RenderRuby.h"
 #include "RenderSVGBlock.h"
@@ -74,7 +75,7 @@
 #include <wtf/RefCountedLeakCounter.h>
 #include <wtf/text/TextStream.h>
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 #include "SelectionRect.h"
 #endif
 
@@ -101,8 +102,11 @@ RenderObject::SetLayoutNeededForbiddenScope::~SetLayoutNeededForbiddenScope()
 
 struct SameSizeAsRenderObject {
     virtual ~SameSizeAsRenderObject() = default; // Allocate vtable pointer.
+#if ASSERT_ENABLED
+    bool weakPtrFactorWasConstructedOnMainThread;
+#endif
     void* pointers[5];
-#ifndef NDEBUG
+#if ASSERT_ENABLED
     unsigned m_debugBitfields : 2;
 #endif
     unsigned m_bitfields;
@@ -123,7 +127,7 @@ RenderObject::RenderObject(Node& node)
     , m_parent(nullptr)
     , m_previous(nullptr)
     , m_next(nullptr)
-#ifndef NDEBUG
+#if ASSERT_ENABLED
     , m_hasAXObject(false)
     , m_setNeedsLayoutForbidden(false)
 #endif
@@ -139,8 +143,8 @@ RenderObject::RenderObject(Node& node)
 RenderObject::~RenderObject()
 {
     view().didDestroyRenderer();
-#ifndef NDEBUG
     ASSERT(!m_hasAXObject);
+#ifndef NDEBUG
     renderObjectCounter.decrement();
 #endif
     ASSERT(!hasRareData());
@@ -414,16 +418,16 @@ RenderLayer* RenderObject::enclosingLayer() const
     return nullptr;
 }
 
-bool RenderObject::scrollRectToVisible(SelectionRevealMode revealMode, const LayoutRect& absoluteRect, bool insideFixed, const ScrollAlignment& alignX, const ScrollAlignment& alignY)
+bool RenderObject::scrollRectToVisible(const LayoutRect& absoluteRect, bool insideFixed, const ScrollRectToVisibleOptions& options)
 {
-    if (revealMode == SelectionRevealMode::DoNotReveal)
+    if (options.revealMode == SelectionRevealMode::DoNotReveal)
         return false;
 
     RenderLayer* enclosingLayer = this->enclosingLayer();
     if (!enclosingLayer)
         return false;
 
-    enclosingLayer->scrollRectToVisible(revealMode, absoluteRect, insideFixed, alignX, alignY);
+    enclosingLayer->scrollRectToVisible(absoluteRect, insideFixed, options);
     return true;
 }
 
@@ -435,6 +439,19 @@ RenderBox& RenderObject::enclosingBox() const
 RenderBoxModelObject& RenderObject::enclosingBoxModelObject() const
 {
     return *lineageOfType<RenderBoxModelObject>(const_cast<RenderObject&>(*this)).first();
+}
+
+const RenderBox* RenderObject::enclosingScrollableContainerForSnapping() const
+{
+    auto& renderBox = enclosingBox();
+    if (auto* scrollableContainer = renderBox.findEnclosingScrollableContainer()) {
+        // The scrollable container for snapping cannot be the node itself.
+        if (scrollableContainer != this)
+            return scrollableContainer;
+        if (renderBox.parentBox())
+            return renderBox.parentBox()->findEnclosingScrollableContainer();
+    }
+    return nullptr;
 }
 
 RenderBlock* RenderObject::firstLineBlock() const
@@ -477,7 +494,7 @@ void RenderObject::clearNeedsLayout()
     setNeedsPositionedMovementLayoutBit(false);
     if (is<RenderElement>(*this))
         downcast<RenderElement>(*this).setAncestorLineBoxDirty(false);
-#ifndef NDEBUG
+#if ASSERT_ENABLED
     checkBlockPositionedObjectsNeedLayout();
 #endif
 }
@@ -550,7 +567,7 @@ void RenderObject::markContainingBlocksForLayout(ScheduleRelayout scheduleRelayo
         scheduleRelayoutForSubtree(*ancestor);
 }
 
-#ifndef NDEBUG
+#if ASSERT_ENABLED
 void RenderObject::checkBlockPositionedObjectsNeedLayout()
 {
     ASSERT(!needsLayout());
@@ -558,7 +575,7 @@ void RenderObject::checkBlockPositionedObjectsNeedLayout()
     if (is<RenderBlock>(*this))
         downcast<RenderBlock>(*this).checkPositionedObjectsNeedLayout();
 }
-#endif
+#endif // ASSERT_ENABLED
 
 void RenderObject::setPreferredLogicalWidthsDirty(bool shouldBeDirty, MarkingBehavior markParents)
 {
@@ -643,7 +660,7 @@ void RenderObject::addPDFURLRect(PaintInfo& paintInfo, const LayoutPoint& paintO
     if (!is<Element>(node) || !node->isLink())
         return;
     Element& element = downcast<Element>(*node);
-    const AtomicString& href = element.getAttribute(hrefAttr);
+    const AtomString& href = element.getAttribute(hrefAttr);
     if (href.isNull())
         return;
 
@@ -660,7 +677,7 @@ void RenderObject::addPDFURLRect(PaintInfo& paintInfo, const LayoutPoint& paintO
 
 }
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
 // This function is similar in spirit to RenderText::absoluteRectsForRange, but returns rectangles
 // which are annotated with additional state which helps iOS draw selections in its unique way.
 // No annotations are added in this class.
@@ -825,7 +842,7 @@ void RenderObject::propagateRepaintToParentWithOutlineAutoIfNeeded(const RenderL
     for (const auto* renderer = this; renderer; renderer = renderer->parent()) {
         bool rendererHasOutlineAutoAncestor = renderer->hasOutlineAutoAncestor();
         ASSERT(rendererHasOutlineAutoAncestor
-            || renderer->outlineStyleForRepaint().outlineStyleIsAuto()
+            || renderer->outlineStyleForRepaint().outlineStyleIsAuto() == OutlineIsAuto::On
             || (is<RenderBoxModelObject>(*renderer) && downcast<RenderBoxModelObject>(*renderer).isContinuation()));
         if (renderer == &repaintContainer && rendererHasOutlineAutoAncestor)
             repaintRectNeedsConverting = true;
@@ -961,9 +978,19 @@ LayoutRect RenderObject::clippedOverflowRectForRepaint(const RenderLayerModelObj
     return LayoutRect();
 }
 
-LayoutRect RenderObject::computeRectForRepaint(const LayoutRect& rect, const RenderLayerModelObject* repaintContainer, RepaintContext context) const
+LayoutRect RenderObject::computeRectForRepaint(const LayoutRect& rect, const RenderLayerModelObject* repaintContainer) const
 {
-    if (repaintContainer == this)
+    return *computeVisibleRectInContainer(rect, repaintContainer, visibleRectContextForRepaint());
+}
+
+FloatRect RenderObject::computeFloatRectForRepaint(const FloatRect& rect, const RenderLayerModelObject* repaintContainer) const
+{
+    return *computeFloatVisibleRectInContainer(rect, repaintContainer, visibleRectContextForRepaint());
+}
+
+Optional<LayoutRect> RenderObject::computeVisibleRectInContainer(const LayoutRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
+{
+    if (container == this)
         return rect;
 
     auto* parent = this->parent();
@@ -972,14 +999,17 @@ LayoutRect RenderObject::computeRectForRepaint(const LayoutRect& rect, const Ren
 
     LayoutRect adjustedRect = rect;
     if (parent->hasOverflowClip()) {
-        downcast<RenderBox>(*parent).applyCachedClipAndScrollPositionForRepaint(adjustedRect);
-        if (adjustedRect.isEmpty())
+        bool isEmpty = !downcast<RenderBox>(*parent).applyCachedClipAndScrollPosition(adjustedRect, container, context);
+        if (isEmpty) {
+            if (context.m_options.contains(VisibleRectContextOption::UseEdgeInclusiveIntersection))
+                return WTF::nullopt;
             return adjustedRect;
+        }
     }
-    return parent->computeRectForRepaint(adjustedRect, repaintContainer, context);
+    return parent->computeVisibleRectInContainer(adjustedRect, container, context);
 }
 
-FloatRect RenderObject::computeFloatRectForRepaint(const FloatRect&, const RenderLayerModelObject*, bool) const
+Optional<FloatRect> RenderObject::computeFloatVisibleRectInContainer(const FloatRect&, const RenderLayerModelObject*, VisibleRectContext) const
 {
     ASSERT_NOT_REACHED();
     return FloatRect();
@@ -1396,11 +1426,11 @@ static inline RenderElement* containerForElement(const RenderObject& renderer, c
     // (2) For absolute positioned elements, it will return a relative positioned inline, while
     // containingBlock() skips to the non-anonymous containing block.
     // This does mean that computePositionedLogicalWidth and computePositionedLogicalHeight have to use container().
-    EPosition pos = renderer.style().position();
+    auto pos = renderer.style().position();
     auto* parent = renderer.parent();
-    if (is<RenderText>(renderer) || (pos != FixedPosition && pos != AbsolutePosition))
+    if (is<RenderText>(renderer) || (pos != PositionType::Fixed && pos != PositionType::Absolute))
         return parent;
-    for (; parent && (pos == AbsolutePosition ? !parent->canContainAbsolutelyPositionedObjects() : !parent->canContainFixedPositionObjects()); parent = parent->parent()) {
+    for (; parent && (pos == PositionType::Absolute ? !parent->canContainAbsolutelyPositionedObjects() : !parent->canContainFixedPositionObjects()); parent = parent->parent()) {
         if (repaintContainerSkipped && repaintContainer == parent)
             *repaintContainerSkipped = true;
     }
@@ -1469,7 +1499,7 @@ void RenderObject::destroy()
 
     m_bitfields.setBeingDestroyed(true);
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS_FAMILY)
     if (hasLayer())
         downcast<RenderBoxModelObject>(*this).layer()->willBeDestroyed();
 #endif
@@ -1570,55 +1600,6 @@ int RenderObject::innerLineHeight() const
     return style().computedLineHeight();
 }
 
-#if ENABLE(DASHBOARD_SUPPORT)
-void RenderObject::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
-{
-    // Convert the style regions to absolute coordinates.
-    if (style().visibility() != VISIBLE || !is<RenderBox>(*this))
-        return;
-
-    auto& box = downcast<RenderBox>(*this);
-    FloatPoint absPos = localToAbsolute();
-
-    const Vector<StyleDashboardRegion>& styleRegions = style().dashboardRegions();
-    for (const auto& styleRegion : styleRegions) {
-        LayoutUnit w = box.width();
-        LayoutUnit h = box.height();
-
-        AnnotatedRegionValue region;
-        region.label = styleRegion.label;
-        region.bounds = LayoutRect(styleRegion.offset.left().value(),
-                                   styleRegion.offset.top().value(),
-                                   w - styleRegion.offset.left().value() - styleRegion.offset.right().value(),
-                                   h - styleRegion.offset.top().value() - styleRegion.offset.bottom().value());
-        region.type = styleRegion.type;
-
-        region.clip = computeAbsoluteRepaintRect(region.bounds);
-        if (region.clip.height() < 0) {
-            region.clip.setHeight(0);
-            region.clip.setWidth(0);
-        }
-
-        region.bounds.setX(absPos.x() + styleRegion.offset.left().value());
-        region.bounds.setY(absPos.y() + styleRegion.offset.top().value());
-
-        regions.append(region);
-    }
-}
-
-void RenderObject::collectAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
-{
-    // RenderTexts don't have their own style, they just use their parent's style,
-    // so we don't want to include them.
-    if (is<RenderText>(*this))
-        return;
-
-    addAnnotatedRegions(regions);
-    for (RenderObject* current = downcast<RenderElement>(*this).firstChild(); current; current = current->nextSibling())
-        current->collectAnnotatedRegions(regions);
-}
-#endif
-
 int RenderObject::caretMinOffset() const
 {
     return 0;
@@ -1650,7 +1631,7 @@ int RenderObject::nextOffset(int current) const
 
 void RenderObject::adjustRectForOutlineAndShadow(LayoutRect& rect) const
 {
-    LayoutUnit outlineSize = outlineStyleForRepaint().outlineSize();
+    LayoutUnit outlineSize { outlineStyleForRepaint().outlineSize() };
     if (const ShadowData* boxShadow = style().boxShadow()) {
         boxShadow->adjustRectForShadow(rect, outlineSize);
         return;
@@ -1770,6 +1751,16 @@ CursorDirective RenderObject::getCursor(const LayoutPoint&, Cursor&) const
     return SetCursorBasedOnStyle;
 }
 
+bool RenderObject::useDarkAppearance() const
+{
+    return document().useDarkAppearance(&style());
+}
+
+OptionSet<StyleColor::Options> RenderObject::styleColorOptions() const
+{
+    return document().styleColorOptions(&style());
+}
+
 bool RenderObject::canUpdateSelectionOnRootLineBoxes()
 {
     if (needsLayout())
@@ -1843,15 +1834,17 @@ RenderFragmentedFlow* RenderObject::locateEnclosingFragmentedFlow() const
     return containingBlock ? containingBlock->enclosingFragmentedFlow() : nullptr;
 }
 
-void RenderObject::calculateBorderStyleColor(const EBorderStyle& style, const BoxSide& side, Color& color)
+void RenderObject::calculateBorderStyleColor(const BorderStyle& style, const BoxSide& side, Color& color)
 {
-    ASSERT(style == INSET || style == OUTSET);
+    ASSERT(style == BorderStyle::Inset || style == BorderStyle::Outset);
+
     // This values were derived empirically.
-    const RGBA32 baseDarkColor = 0xFF202020;
-    const RGBA32 baseLightColor = 0xFFEBEBEB;
+    constexpr SimpleColor baseDarkColor { 0xFF202020 };
+    constexpr SimpleColor baseLightColor { 0xFFEBEBEB };
+
     enum Operation { Darken, Lighten };
 
-    Operation operation = (side == BSTop || side == BSLeft) == (style == INSET) ? Darken : Lighten;
+    Operation operation = (side == BSTop || side == BSLeft) == (style == BorderStyle::Inset) ? Darken : Lighten;
 
     // Here we will darken the border decoration color when needed. This will yield a similar behavior as in FF.
     if (operation == Darken) {
@@ -1902,13 +1895,35 @@ const RenderObject::RenderObjectRareData& RenderObject::rareData() const
 RenderObject::RenderObjectRareData& RenderObject::ensureRareData()
 {
     setHasRareData(true);
-    return *rareDataMap().ensure(this, [] { return std::make_unique<RenderObjectRareData>(); }).iterator->value;
+    return *rareDataMap().ensure(this, [] { return makeUnique<RenderObjectRareData>(); }).iterator->value;
 }
 
 void RenderObject::removeRareData()
 {
     rareDataMap().remove(this);
     setHasRareData(false);
+}
+
+bool RenderObject::hasNonEmptyVisibleRectRespectingParentFrames() const
+{
+    auto enclosingFrameRenderer = [] (const RenderObject& renderer) {
+        auto* ownerElement = renderer.document().ownerElement();
+        return ownerElement ? ownerElement->renderer() : nullptr;
+    };
+
+    auto hasEmptyVisibleRect = [] (const RenderObject& renderer) {
+        VisibleRectContext context { false, false, { VisibleRectContextOption::UseEdgeInclusiveIntersection, VisibleRectContextOption::ApplyCompositedClips }};
+        auto& box = renderer.enclosingBoxModelObject();
+        auto clippedBounds = box.computeVisibleRectInContainer(box.borderBoundingBox(), &box.view(), context);
+        return !clippedBounds || clippedBounds->isEmpty();
+    };
+
+    for (auto* renderer = this; renderer; renderer = enclosingFrameRenderer(*renderer)) {
+        if (hasEmptyVisibleRect(*renderer))
+            return true;
+    }
+
+    return false;
 }
 
 #if ENABLE(TREE_DEBUGGING)
@@ -1934,6 +1949,18 @@ void printLayerTreeForLiveDocuments()
             fprintf(stderr, "----------------------main frame--------------------------\n");
         fprintf(stderr, "%s", document->url().string().utf8().data());
         showLayerTree(document->renderView());
+    }
+}
+
+void printGraphicsLayerTreeForLiveDocuments()
+{
+    for (const auto* document : Document::allDocuments()) {
+        if (!document->renderView())
+            continue;
+        if (document->frame() && document->frame()->isMainFrame()) {
+            WTFLogAlways("Graphics layer tree for root document %p %s", document, document->url().string().utf8().data());
+            showGraphicsLayerTreeForCompositor(document->renderView()->compositor());
+        }
     }
 }
 

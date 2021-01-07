@@ -31,7 +31,6 @@
 #include "FloatQuad.h"
 #include "LayoutSize.h"
 #include "TransformationMatrix.h"
-#include <wtf/Optional.h>
 
 namespace WebCore {
 
@@ -79,18 +78,18 @@ public:
         m_lastPlanarQuad = quad;
     }
 
-    // FIXME: webkit.org/b/144226 use std::optional<FloatQuad>.
+    // FIXME: webkit.org/b/144226 use Optional<FloatQuad>.
     void setSecondaryQuad(const FloatQuad* quad)
     {
         // We must be in a flattened state (no accumulated offset) when setting this secondary quad.
         ASSERT(m_accumulatedOffset == LayoutSize());
         if (quad)
-            m_lastPlanarSecondaryQuad = std::make_unique<FloatQuad>(*quad);
+            m_lastPlanarSecondaryQuad = makeUnique<FloatQuad>(*quad);
         else
             m_lastPlanarSecondaryQuad = nullptr;
     }
 
-    // FIXME: webkit.org/b/144226 use std::optional<FloatQuad>.
+    // FIXME: webkit.org/b/144226 use Optional<FloatQuad>.
     void setLastPlanarSecondaryQuad(const FloatQuad*);
 
     void move(LayoutUnit x, LayoutUnit y, TransformAccumulation accumulate = FlattenTransform)
@@ -112,7 +111,7 @@ public:
     // Return the point or quad mapped through the current transform
     FloatPoint mappedPoint(bool* wasClamped = nullptr) const;
     FloatQuad mappedQuad(bool* wasClamped = nullptr) const;
-    std::optional<FloatQuad> mappedSecondaryQuad(bool* wasClamped = nullptr) const;
+    Optional<FloatQuad> mappedSecondaryQuad(bool* wasClamped = nullptr) const;
 
 private:
     void translateTransform(const LayoutSize&);

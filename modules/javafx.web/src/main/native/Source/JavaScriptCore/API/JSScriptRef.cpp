@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2019 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,9 +41,9 @@ using namespace JSC;
 
 struct OpaqueJSScript : public SourceProvider {
 public:
-    static WTF::Ref<OpaqueJSScript> create(VM& vm, const SourceOrigin& sourceOrigin, const String& url, int startingLineNumber, const String& source)
+    static WTF::Ref<OpaqueJSScript> create(VM& vm, const SourceOrigin& sourceOrigin, URL&& url, int startingLineNumber, const String& source)
     {
-        return WTF::adoptRef(*new OpaqueJSScript(vm, sourceOrigin, url, startingLineNumber, source));
+        return WTF::adoptRef(*new OpaqueJSScript(vm, sourceOrigin, WTFMove(url), startingLineNumber, source));
     }
 
     unsigned hash() const override
@@ -59,8 +59,8 @@ public:
     VM& vm() const { return m_vm; }
 
 private:
-    OpaqueJSScript(VM& vm, const SourceOrigin& sourceOrigin, const String& url, int startingLineNumber, const String& source)
-        : SourceProvider(sourceOrigin, url, TextPosition(OrdinalNumber::fromOneBasedInt(startingLineNumber), OrdinalNumber()), SourceProviderSourceType::Program)
+    OpaqueJSScript(VM& vm, const SourceOrigin& sourceOrigin, URL&& url, int startingLineNumber, const String& source)
+        : SourceProvider(sourceOrigin, WTFMove(url), TextPosition(OrdinalNumber::fromOneBasedInt(startingLineNumber), OrdinalNumber()), SourceProviderSourceType::Program)
         , m_vm(vm)
         , m_source(source.isNull() ? *StringImpl::empty() : *source.impl())
     {
@@ -75,7 +75,7 @@ private:
 static bool parseScript(VM& vm, const SourceCode& source, ParserError& error)
 {
     return !!JSC::parse<JSC::ProgramNode>(
-        &vm, source, Identifier(), JSParserBuiltinMode::NotBuiltin,
+        vm, source, Identifier(), JSParserBuiltinMode::NotBuiltin,
         JSParserStrictMode::NotStrict, JSParserScriptMode::Classic, SourceParseMode::ProgramMode, SuperBinding::NotNeeded,
         error);
 }
@@ -94,12 +94,12 @@ JSScriptRef JSScriptCreateReferencingImmortalASCIIText(JSContextGroupRef context
     startingLineNumber = std::max(1, startingLineNumber);
 
     auto sourceURLString = url ? url->string() : String();
-    auto result = OpaqueJSScript::create(vm, SourceOrigin { sourceURLString }, sourceURLString, startingLineNumber, String(StringImpl::createFromLiteral(source, length)));
+    auto result = OpaqueJSScript::create(vm, SourceOrigin { sourceURLString }, URL({ }, sourceURLString), startingLineNumber, String(StringImpl::createFromLiteral(source, length)));
 
     ParserError error;
     if (!parseScript(vm, SourceCode(result.copyRef()), error)) {
         if (errorMessage)
-            *errorMessage = OpaqueJSString::create(error.message()).leakRef();
+            *errorMessage = OpaqueJSString::tryCreate(error.message()).leakRef();
         if (errorLine)
             *errorLine = error.line();
         return nullptr;
@@ -116,12 +116,12 @@ JSScriptRef JSScriptCreateFromString(JSContextGroupRef contextGroup, JSStringRef
     startingLineNumber = std::max(1, startingLineNumber);
 
     auto sourceURLString = url ? url->string() : String();
-    auto result = OpaqueJSScript::create(vm, SourceOrigin { sourceURLString }, sourceURLString, startingLineNumber, source->string());
+    auto result = OpaqueJSScript::create(vm, SourceOrigin { sourceURLString }, URL({ }, sourceURLString), startingLineNumber, source->string());
 
     ParserError error;
     if (!parseScript(vm, SourceCode(result.copyRef()), error)) {
         if (errorMessage)
-            *errorMessage = OpaqueJSString::create(error.message()).leakRef();
+            *errorMessage = OpaqueJSString::tryCreate(error.message()).leakRef();
         if (errorLine)
             *errorLine = error.line();
         return nullptr;
@@ -144,23 +144,23 @@ void JSScriptRelease(JSScriptRef script)
 
 JSValueRef JSScriptEvaluate(JSContextRef context, JSScriptRef script, JSValueRef thisValueRef, JSValueRef* exception)
 {
-    ExecState* exec = toJS(context);
-    VM& vm = exec->vm();
+    JSGlobalObject* globalObject = toJS(context);
+    VM& vm = globalObject->vm();
     JSLockHolder locker(vm);
     if (&script->vm() != &vm) {
         RELEASE_ASSERT_NOT_REACHED();
         return 0;
     }
     NakedPtr<Exception> internalException;
-    JSValue thisValue = thisValueRef ? toJS(exec, thisValueRef) : jsUndefined();
-    JSValue result = evaluate(exec, SourceCode(*script), thisValue, internalException);
+    JSValue thisValue = thisValueRef ? toJS(globalObject, thisValueRef) : jsUndefined();
+    JSValue result = evaluate(globalObject, SourceCode(*script), thisValue, internalException);
     if (internalException) {
         if (exception)
-            *exception = toRef(exec, internalException->value());
+            *exception = toRef(globalObject, internalException->value());
         return 0;
     }
     ASSERT(result);
-    return toRef(exec, result);
+    return toRef(globalObject, result);
 }
 
 }

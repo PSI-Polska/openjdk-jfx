@@ -45,19 +45,21 @@ public:
     public:
         virtual void setPlaybackTarget(Ref<MediaPlaybackTarget>&&) = 0;
         virtual void externalOutputDeviceAvailableDidChange(bool) = 0;
+        virtual void playbackTargetPickerWasDismissed() = 0;
 
         void invalidate();
     };
 
     virtual ~MediaPlaybackTargetPicker();
 
-    virtual void showPlaybackTargetPicker(const FloatRect&, bool checkActiveRoute);
+    virtual void showPlaybackTargetPicker(const FloatRect&, bool checkActiveRoute, bool useDarkAppearance);
     virtual void startingMonitoringPlaybackTargets();
     virtual void stopMonitoringPlaybackTargets();
     virtual void invalidatePlaybackTargets();
 
     void availableDevicesDidChange() { addPendingAction(OutputDeviceAvailabilityChanged); }
     void currentDeviceDidChange() { addPendingAction(CurrentDeviceDidChange); }
+    void playbackTargetPickerWasDismissed() { addPendingAction(PlaybackTargetPickerWasDismissed); }
 
 protected:
     explicit MediaPlaybackTargetPicker(Client&);
@@ -65,6 +67,7 @@ protected:
     enum ActionType {
         OutputDeviceAvailabilityChanged = 1 << 0,
         CurrentDeviceDidChange = 1 << 1,
+        PlaybackTargetPickerWasDismissed = 1 << 2,
     };
     typedef unsigned PendingActionFlags;
 

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2017 Apple Inc. All rights reserved.
+ *  Copyright (C) 2005-2019 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -18,8 +18,7 @@
  *
  */
 
-#ifndef WTF_Vector_h
-#define WTF_Vector_h
+#pragma once
 
 #include <initializer_list>
 #include <limits>
@@ -41,7 +40,13 @@
 extern "C" void __sanitizer_annotate_contiguous_container(const void* begin, const void* end, const void* old_mid, const void* new_mid);
 #endif
 
+namespace JSC {
+class LLIntOffsetsExtractor;
+}
+
 namespace WTF {
+
+DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(Vector);
 
 template <bool needsDestruction, typename T>
 struct VectorDestructor;
@@ -65,28 +70,43 @@ struct VectorDestructor<true, T>
 template <bool needsInitialization, bool canInitializeWithMemset, typename T>
 struct VectorInitializer;
 
-template<bool ignore, typename T>
-struct VectorInitializer<false, ignore, T>
+template<bool canInitializeWithMemset, typename T>
+struct VectorInitializer<false, canInitializeWithMemset, T>
 {
-    static void initialize(T*, T*) {}
+    static void initializeIfNonPOD(T*, T*) { }
+
+    static void initialize(T* begin, T* end)
+    {
+        VectorInitializer<true, canInitializeWithMemset, T>::initialize(begin, end);
+    }
 };
 
 template<typename T>
 struct VectorInitializer<true, false, T>
 {
-    static void initialize(T* begin, T* end)
+    static void initializeIfNonPOD(T* begin, T* end)
     {
         for (T* cur = begin; cur != end; ++cur)
-            new (NotNull, cur) T;
+            new (NotNull, cur) T();
+    }
+
+    static void initialize(T* begin, T* end)
+    {
+        initializeIfNonPOD(begin, end);
     }
 };
 
 template<typename T>
 struct VectorInitializer<true, true, T>
 {
-    static void initialize(T* begin, T* end)
+    static void initializeIfNonPOD(T* begin, T* end)
     {
         memset(static_cast<void*>(begin), 0, reinterpret_cast<char*>(end) - reinterpret_cast<char*>(begin));
+    }
+
+    static void initialize(T* begin, T* end)
+    {
+        initializeIfNonPOD(begin, end);
     }
 };
 
@@ -186,10 +206,7 @@ struct VectorFiller<true, T>
     static void uninitializedFill(T* dst, T* dstEnd, const T& val)
     {
         static_assert(sizeof(T) == 1, "Size of type T should be equal to one!");
-#if COMPILER(GCC_OR_CLANG) && defined(_FORTIFY_SOURCE)
-        if (!__builtin_constant_p(dstEnd - dst) || (!(dstEnd - dst)))
-#endif
-            memset(dst, val, dstEnd - dst);
+        memset(dst, val, dstEnd - dst);
     }
 };
 
@@ -223,6 +240,11 @@ struct VectorTypeOperations
     static void destruct(T* begin, T* end)
     {
         VectorDestructor<!std::is_trivially_destructible<T>::value, T>::destruct(begin, end);
+    }
+
+    static void initializeIfNonPOD(T* begin, T* end)
+    {
+        VectorInitializer<VectorTraits<T>::needsInitialization, VectorTraits<T>::canInitializeWithMemset, T>::initializeIfNonPOD(begin, end);
     }
 
     static void initialize(T* begin, T* end)
@@ -267,7 +289,6 @@ public:
             CRASH();
         size_t sizeToAllocate = newCapacity * sizeof(T);
         m_capacity = sizeToAllocate / sizeof(T);
-        updateMask();
         m_buffer = static_cast<T*>(Malloc::malloc(sizeToAllocate));
     }
 
@@ -282,7 +303,6 @@ public:
         if (!newBuffer)
             return false;
         m_capacity = sizeToAllocate / sizeof(T);
-        updateMask();
         m_buffer = newBuffer;
         return true;
     }
@@ -299,7 +319,6 @@ public:
             CRASH();
         size_t sizeToAllocate = newCapacity * sizeof(T);
         m_capacity = sizeToAllocate / sizeof(T);
-        updateMask();
         m_buffer = static_cast<T*>(Malloc::realloc(m_buffer, sizeToAllocate));
     }
 
@@ -311,7 +330,6 @@ public:
         if (m_buffer == bufferToDeallocate) {
             m_buffer = 0;
             m_capacity = 0;
-            m_mask = 0;
         }
 
         Malloc::free(bufferToDeallocate);
@@ -322,13 +340,12 @@ public:
     static ptrdiff_t bufferMemoryOffset() { return OBJECT_OFFSETOF(VectorBufferBase, m_buffer); }
     size_t capacity() const { return m_capacity; }
 
-    MallocPtr<T> releaseBuffer()
+    MallocPtr<T, Malloc> releaseBuffer()
     {
         T* buffer = m_buffer;
         m_buffer = 0;
         m_capacity = 0;
-        m_mask = 0;
-        return adoptMallocPtr(buffer);
+        return adoptMallocPtr<T, Malloc>(buffer);
     }
 
 protected:
@@ -336,7 +353,6 @@ protected:
         : m_buffer(0)
         , m_capacity(0)
         , m_size(0)
-        , m_mask(0)
     {
     }
 
@@ -344,9 +360,7 @@ protected:
         : m_buffer(buffer)
         , m_capacity(capacity)
         , m_size(size)
-        , m_mask(0)
     {
-        updateMask();
     }
 
     ~VectorBufferBase()
@@ -354,19 +368,12 @@ protected:
         // FIXME: It would be nice to find a way to ASSERT that m_buffer hasn't leaked here.
     }
 
-    void updateMask()
-    {
-        m_mask = maskForSize(m_capacity);
-    }
-
     T* m_buffer;
     unsigned m_capacity;
     unsigned m_size; // Only used by the Vector subclass, but placed here to avoid padding the struct.
-    unsigned m_mask;
 };
 
-template<typename T, size_t inlineCapacity, typename Malloc>
-class VectorBuffer;
+template<typename T, size_t inlineCapacity, typename Malloc = VectorMalloc> class VectorBuffer;
 
 template<typename T, typename Malloc>
 class VectorBuffer<T, 0, Malloc> : private VectorBufferBase<T, Malloc> {
@@ -395,7 +402,6 @@ public:
     {
         std::swap(m_buffer, other.m_buffer);
         std::swap(m_capacity, other.m_capacity);
-        std::swap(m_mask, other.m_mask);
     }
 
     void restoreInlineBufferIfNeeded() { }
@@ -420,10 +426,10 @@ public:
     using Base::releaseBuffer;
 
 protected:
-    using Base::m_mask;
     using Base::m_size;
 
 private:
+    friend class JSC::LLIntOffsetsExtractor;
     using Base::m_buffer;
     using Base::m_capacity;
 };
@@ -459,7 +465,6 @@ public:
         else {
             m_buffer = inlineBuffer();
             m_capacity = inlineCapacity;
-            updateMask();
         }
     }
 
@@ -469,7 +474,6 @@ public:
             return Base::tryAllocateBuffer(newCapacity);
         m_buffer = inlineBuffer();
         m_capacity = inlineCapacity;
-        updateMask();
         return true;
     }
 
@@ -497,23 +501,19 @@ public:
         if (buffer() == inlineBuffer() && other.buffer() == other.inlineBuffer()) {
             swapInlineBuffer(other, mySize, otherSize);
             std::swap(m_capacity, other.m_capacity);
-            std::swap(m_mask, other.m_mask);
         } else if (buffer() == inlineBuffer()) {
             m_buffer = other.m_buffer;
             other.m_buffer = other.inlineBuffer();
             swapInlineBuffer(other, mySize, 0);
             std::swap(m_capacity, other.m_capacity);
-            std::swap(m_mask, other.m_mask);
         } else if (other.buffer() == other.inlineBuffer()) {
             other.m_buffer = m_buffer;
             m_buffer = inlineBuffer();
             swapInlineBuffer(other, 0, otherSize);
             std::swap(m_capacity, other.m_capacity);
-            std::swap(m_mask, other.m_mask);
         } else {
             std::swap(m_buffer, other.m_buffer);
             std::swap(m_capacity, other.m_capacity);
-            std::swap(m_mask, other.m_mask);
         }
     }
 
@@ -523,14 +523,16 @@ public:
             return;
         m_buffer = inlineBuffer();
         m_capacity = inlineCapacity;
-        updateMask();
     }
 
 #if ASAN_ENABLED
     void* endOfBuffer()
     {
         ASSERT(buffer());
+
+        IGNORE_GCC_WARNINGS_BEGIN("invalid-offsetof")
         static_assert((offsetof(VectorBuffer, m_inlineBuffer) + sizeof(m_inlineBuffer)) % 8 == 0, "Inline buffer end needs to be on 8 byte boundary for ASan annotations to work.");
+        IGNORE_GCC_WARNINGS_END
 
         if (buffer() == inlineBuffer())
             return reinterpret_cast<char*>(m_inlineBuffer) + sizeof(m_inlineBuffer);
@@ -543,21 +545,19 @@ public:
     using Base::capacity;
     using Base::bufferMemoryOffset;
 
-    MallocPtr<T> releaseBuffer()
+    MallocPtr<T, Malloc> releaseBuffer()
     {
         if (buffer() == inlineBuffer())
-            return nullptr;
+            return { };
         return Base::releaseBuffer();
     }
 
 protected:
-    using Base::m_mask;
     using Base::m_size;
 
 private:
     using Base::m_buffer;
     using Base::m_capacity;
-    using Base::updateMask;
 
     void swapInlineBuffer(VectorBuffer& other, size_t mySize, size_t otherSize)
     {
@@ -587,8 +587,8 @@ private:
 #if ASAN_ENABLED
     // ASan needs the buffer to begin and end on 8-byte boundaries for annotations to work.
     // FIXME: Add a redzone before the buffer to catch off by one accesses. We don't need a guard after, because the buffer is the last member variable.
-    static const size_t asanInlineBufferAlignment = std::alignment_of<T>::value >= 8 ? std::alignment_of<T>::value : 8;
-    static const size_t asanAdjustedInlineCapacity = ((sizeof(T) * inlineCapacity + 7) & ~7) / sizeof(T);
+    static constexpr size_t asanInlineBufferAlignment = std::alignment_of<T>::value >= 8 ? std::alignment_of<T>::value : 8;
+    static constexpr size_t asanAdjustedInlineCapacity = ((sizeof(T) * inlineCapacity + 7) & ~7) / sizeof(T);
     typename std::aligned_storage<sizeof(T), asanInlineBufferAlignment>::type m_inlineBuffer[asanAdjustedInlineCapacity];
 #else
     typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type m_inlineBuffer[inlineCapacity];
@@ -609,6 +609,7 @@ class Vector : private VectorBuffer<T, inlineCapacity, Malloc> {
 private:
     typedef VectorBuffer<T, inlineCapacity, Malloc> Base;
     typedef VectorTypeOperations<T> TypeOperations;
+    friend class JSC::LLIntOffsetsExtractor;
 
 public:
     typedef T ValueType;
@@ -629,7 +630,7 @@ public:
         asanSetInitialBufferSizeTo(size);
 
         if (begin())
-            TypeOperations::initialize(begin(), end());
+            TypeOperations::initializeIfNonPOD(begin(), end());
     }
 
     Vector(size_t size, const T& val)
@@ -665,6 +666,11 @@ public:
         return result;
     }
 
+    Vector(WTF::HashTableDeletedValueType)
+        : Base(0, std::numeric_limits<decltype(m_size)>::max())
+    {
+    }
+
     ~Vector()
     {
         if (m_size)
@@ -693,23 +699,23 @@ public:
     {
         if (UNLIKELY(i >= size()))
             OverflowHandler::overflowed();
-        return Base::buffer()[i & m_mask];
+        return Base::buffer()[i];
     }
     const T& at(size_t i) const
     {
         if (UNLIKELY(i >= size()))
             OverflowHandler::overflowed();
-        return Base::buffer()[i & m_mask];
+        return Base::buffer()[i];
     }
     T& at(Checked<size_t> i)
     {
         RELEASE_ASSERT(i < size());
-        return Base::buffer()[i & m_mask];
+        return Base::buffer()[i];
     }
     const T& at(Checked<size_t> i) const
     {
         RELEASE_ASSERT(i < size());
-        return Base::buffer()[i & m_mask];
+        return Base::buffer()[i];
     }
 
     T& operator[](size_t i) { return at(i); }
@@ -762,21 +768,25 @@ public:
 
     void clear() { shrinkCapacity(0); }
 
-    void append(ValueType&& value) { append<ValueType>(std::forward<ValueType>(value)); }
+    template<typename U = T> Vector<U> isolatedCopy() const;
+
+    ALWAYS_INLINE void append(ValueType&& value) { append<ValueType>(std::forward<ValueType>(value)); }
     template<typename U> void append(U&&);
     template<typename... Args> void constructAndAppend(Args&&...);
     template<typename... Args> bool tryConstructAndAppend(Args&&...);
 
     void uncheckedAppend(ValueType&& value) { uncheckedAppend<ValueType>(std::forward<ValueType>(value)); }
     template<typename U> void uncheckedAppend(U&&);
+    template<typename... Args> void uncheckedConstructAndAppend(Args&&...);
 
     template<typename U> void append(const U*, size_t);
     template<typename U, size_t otherCapacity> void appendVector(const Vector<U, otherCapacity>&);
+    template<typename U, size_t otherCapacity> void appendVector(Vector<U, otherCapacity>&&);
     template<typename U> bool tryAppend(const U*, size_t);
 
     template<typename U> void insert(size_t position, const U*, size_t);
     template<typename U> void insert(size_t position, U&&);
-    template<typename U, size_t c> void insertVector(size_t position, const Vector<U, c>&);
+    template<typename U, size_t c, typename OH, size_t m, typename M> void insertVector(size_t position, const Vector<U, c, OH, m, M>&);
 
     void remove(size_t position);
     void remove(size_t position, size_t length);
@@ -797,9 +807,9 @@ public:
 
     template<typename Iterator> void appendRange(Iterator start, Iterator end);
 
-    MallocPtr<T> releaseBuffer();
+    MallocPtr<T, Malloc> releaseBuffer();
 
-    void swap(Vector<T, inlineCapacity, OverflowHandler, minCapacity>& other)
+    void swap(Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>& other)
     {
 #if ASAN_ENABLED
         if (this == std::addressof(other)) // ASan will crash if we try to restrict access to the same buffer twice.
@@ -822,6 +832,8 @@ public:
     void checkConsistency();
 
     template<typename MapFunction, typename R = typename std::result_of<MapFunction(const T&)>::type> Vector<R> map(MapFunction) const;
+
+    bool isHashTableDeletedValue() const { return m_size == std::numeric_limits<decltype(m_size)>::max(); }
 
 private:
     void expandCapacity(size_t newMinCapacity);
@@ -853,7 +865,6 @@ private:
 
     void asanBufferSizeWillChangeTo(size_t);
 
-    using Base::m_mask;
     using Base::m_size;
     using Base::buffer;
     using Base::capacity;
@@ -1037,7 +1048,7 @@ void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::expandCapa
 }
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
-T* Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::expandCapacity(size_t newMinCapacity, T* ptr)
+NEVER_INLINE T* Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::expandCapacity(size_t newMinCapacity, T* ptr)
 {
     if (ptr < begin() || ptr >= end()) {
         expandCapacity(newMinCapacity);
@@ -1087,7 +1098,7 @@ inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::res
             expandCapacity(size);
         asanBufferSizeWillChangeTo(size);
         if (begin())
-            TypeOperations::initialize(end(), begin() + size);
+            TypeOperations::initializeIfNonPOD(end(), begin() + size);
     }
 
     m_size = size;
@@ -1117,7 +1128,7 @@ void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::grow(size_
         expandCapacity(size);
     asanBufferSizeWillChangeTo(size);
     if (begin())
-        TypeOperations::initialize(end(), begin() + size);
+        TypeOperations::initializeIfNonPOD(end(), begin() + size);
     m_size = size;
 }
 
@@ -1249,7 +1260,7 @@ void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::shrinkCapa
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
 template<typename U>
-void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::append(const U* data, size_t dataSize)
+ALWAYS_INLINE void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::append(const U* data, size_t dataSize)
 {
     size_t newSize = m_size + dataSize;
     if (newSize > capacity()) {
@@ -1266,7 +1277,7 @@ void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::append(con
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
 template<typename U>
-bool Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::tryAppend(const U* data, size_t dataSize)
+ALWAYS_INLINE bool Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::tryAppend(const U* data, size_t dataSize)
 {
     size_t newSize = m_size + dataSize;
     if (newSize > capacity()) {
@@ -1387,10 +1398,33 @@ ALWAYS_INLINE void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Mallo
 }
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
+template<typename... Args>
+ALWAYS_INLINE void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::uncheckedConstructAndAppend(Args&&... args)
+{
+    ASSERT(size() < capacity());
+
+    asanBufferSizeWillChangeTo(m_size + 1);
+
+    new (NotNull, end()) T(std::forward<Args>(args)...);
+    ++m_size;
+}
+
+template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
 template<typename U, size_t otherCapacity>
 inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::appendVector(const Vector<U, otherCapacity>& val)
 {
     append(val.begin(), val.size());
+}
+
+template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
+template<typename U, size_t otherCapacity>
+inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::appendVector(Vector<U, otherCapacity>&& val)
+{
+    size_t newSize = m_size + val.size();
+    if (newSize > capacity())
+        expandCapacity(newSize);
+    for (auto& item : val)
+        uncheckedAppend(WTFMove(item));
 }
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
@@ -1433,8 +1467,8 @@ inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::ins
 }
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
-template<typename U, size_t c>
-inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::insertVector(size_t position, const Vector<U, c>& val)
+template<typename U, size_t c, typename OH, size_t m, typename M>
+inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::insertVector(size_t position, const Vector<U, c, OH, m, M>& val)
 {
     insert(position, val.begin(), val.size());
 }
@@ -1540,7 +1574,7 @@ inline Vector<R> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>
 }
 
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
-inline MallocPtr<T> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::releaseBuffer()
+inline MallocPtr<T, Malloc> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::releaseBuffer()
 {
     // FIXME: Find a way to preserve annotations on the returned buffer.
     // ASan requires that all annotations are removed before deallocation,
@@ -1553,7 +1587,7 @@ inline MallocPtr<T> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Mall
         // that means it was using the inline buffer. In that case,
         // we create a brand new buffer so the caller always gets one.
         size_t bytes = m_size * sizeof(T);
-        buffer = adoptMallocPtr(static_cast<T*>(Malloc::malloc(bytes)));
+        buffer = adoptMallocPtr<T, Malloc>(static_cast<T*>(Malloc::malloc(bytes)));
         memcpy(buffer.get(), data(), bytes);
     }
     m_size = 0;
@@ -1564,7 +1598,7 @@ inline MallocPtr<T> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Mall
 template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
 inline void Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::checkConsistency()
 {
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     for (size_t i = 0; i < size(); ++i)
         ValueCheck<T>::checkConsistency(at(i));
 #endif
@@ -1576,8 +1610,8 @@ inline void swap(Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>
     a.swap(b);
 }
 
-template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
-bool operator==(const Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>& a, const Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>& b)
+template<typename T, size_t inlineCapacityA, typename OverflowHandlerA, size_t minCapacityA, typename MallocA, size_t inlineCapacityB, typename OverflowHandlerB, size_t minCapacityB, typename MallocB>
+bool operator==(const Vector<T, inlineCapacityA, OverflowHandlerA, minCapacityA, MallocA>& a, const Vector<T, inlineCapacityB, OverflowHandlerB, minCapacityB, MallocB>& b)
 {
     if (a.size() != b.size())
         return false;
@@ -1585,13 +1619,13 @@ bool operator==(const Vector<T, inlineCapacity, OverflowHandler, minCapacity, Ma
     return VectorTypeOperations<T>::compare(a.data(), b.data(), a.size());
 }
 
-template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
-inline bool operator!=(const Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>& a, const Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>& b)
+template<typename T, size_t inlineCapacityA, typename OverflowHandlerA, size_t minCapacityA, typename MallocA, size_t inlineCapacityB, typename OverflowHandlerB, size_t minCapacityB, typename MallocB>
+inline bool operator!=(const Vector<T, inlineCapacityA, OverflowHandlerA, minCapacityA, MallocA>& a, const Vector<T, inlineCapacityB, OverflowHandlerB, minCapacityB, MallocB>& b)
 {
     return !(a == b);
 }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
 template<typename T> struct ValueCheck<Vector<T>> {
     typedef Vector<T> TraitType;
     static void checkConsistency(const Vector<T>& v)
@@ -1599,7 +1633,18 @@ template<typename T> struct ValueCheck<Vector<T>> {
         v.checkConsistency();
     }
 };
-#endif
+#endif // ASSERT_ENABLED
+
+template<typename T, size_t inlineCapacity, typename OverflowHandler, size_t minCapacity, typename Malloc>
+template<typename U>
+inline Vector<U> Vector<T, inlineCapacity, OverflowHandler, minCapacity, Malloc>::isolatedCopy() const
+{
+    Vector<U> copy;
+    copy.reserveInitialCapacity(size());
+    for (const auto& element : *this)
+        copy.uncheckedAppend(element.isolatedCopy());
+    return copy;
+}
 
 template<typename VectorType, typename Func>
 size_t removeRepeatedElements(VectorType& vector, const Func& func)
@@ -1697,5 +1742,3 @@ using WTF::copyToVector;
 using WTF::copyToVectorOf;
 using WTF::copyToVectorSpecialization;
 using WTF::removeRepeatedElements;
-
-#endif // WTF_Vector_h

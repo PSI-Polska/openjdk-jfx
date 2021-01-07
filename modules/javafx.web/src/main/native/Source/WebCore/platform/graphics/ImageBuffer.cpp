@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009 Dirk Schulze <krit@webkit.org>
  * Copyright (C) Research In Motion Limited 2011. All rights reserved.
- * Copyright (C) 2016-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,6 +31,7 @@
 #include "ColorUtilities.h"
 #include "GraphicsContext.h"
 #include "IntRect.h"
+#include <wtf/IsoMallocInlines.h>
 #include <wtf/MathExtras.h>
 
 namespace WebCore {
@@ -38,20 +39,22 @@ namespace WebCore {
 static const float MaxClampedLength = 4096;
 static const float MaxClampedArea = MaxClampedLength * MaxClampedLength;
 
-std::unique_ptr<ImageBuffer> ImageBuffer::create(const FloatSize& size, RenderingMode renderingMode, float resolutionScale, ColorSpace colorSpace)
+WTF_MAKE_ISO_ALLOCATED_IMPL(ImageBuffer);
+
+std::unique_ptr<ImageBuffer> ImageBuffer::create(const FloatSize& size, RenderingMode renderingMode, float resolutionScale, ColorSpace colorSpace, const HostWindow* hostWindow)
 {
     bool success = false;
-    std::unique_ptr<ImageBuffer> buffer(new ImageBuffer(size, resolutionScale, colorSpace, renderingMode, success));
+    std::unique_ptr<ImageBuffer> buffer(new ImageBuffer(size, resolutionScale, colorSpace, renderingMode, hostWindow, success));
     if (!success)
         return nullptr;
     return buffer;
 }
 
 #if USE(DIRECT2D)
-std::unique_ptr<ImageBuffer> ImageBuffer::create(const FloatSize& size, RenderingMode renderingMode, const GraphicsContext* targetContext, float resolutionScale, ColorSpace colorSpace)
+std::unique_ptr<ImageBuffer> ImageBuffer::create(const FloatSize& size, RenderingMode renderingMode, const GraphicsContext* targetContext, float resolutionScale, ColorSpace colorSpace, const HostWindow* hostWindow)
 {
     bool success = false;
-    std::unique_ptr<ImageBuffer> buffer(new ImageBuffer(size, resolutionScale, colorSpace, renderingMode, targetContext, success));
+    std::unique_ptr<ImageBuffer> buffer(new ImageBuffer(size, resolutionScale, colorSpace, renderingMode, hostWindow, targetContext, success));
     if (!success)
         return nullptr;
     return buffer;
@@ -102,36 +105,26 @@ FloatRect ImageBuffer::clampedRect(const FloatRect& rect)
     return FloatRect(rect.location(), clampedSize(rect.size()));
 }
 
+#if !USE(CG) && !USE(CAIRO)
 Vector<uint8_t> ImageBuffer::toBGRAData() const
 {
-#if USE(CG)
-    if (context().isAcceleratedContext())
-        flushContext();
-    return m_data.toBGRAData(context().isAcceleratedContext(), m_size.width(), m_size.height());
-#else
     // FIXME: Implement this for other backends.
     return { };
-#endif
 }
+#endif
 
 #if !(USE(CG) || USE(DIRECT2D))
-
-FloatSize ImageBuffer::sizeForDestinationSize(FloatSize size) const
-{
-    return size;
-}
-
 void ImageBuffer::transformColorSpace(ColorSpace srcColorSpace, ColorSpace dstColorSpace)
 {
     if (srcColorSpace == dstColorSpace)
         return;
 
     // only sRGB <-> linearRGB are supported at the moment
-    if ((srcColorSpace != ColorSpaceLinearRGB && srcColorSpace != ColorSpaceSRGB)
-        || (dstColorSpace != ColorSpaceLinearRGB && dstColorSpace != ColorSpaceSRGB))
+    if ((srcColorSpace != ColorSpace::LinearRGB && srcColorSpace != ColorSpace::SRGB)
+        || (dstColorSpace != ColorSpace::LinearRGB && dstColorSpace != ColorSpace::SRGB))
         return;
 
-    if (dstColorSpace == ColorSpaceLinearRGB) {
+    if (dstColorSpace == ColorSpace::LinearRGB) {
         static const std::array<uint8_t, 256> linearRgbLUT = [] {
             std::array<uint8_t, 256> array;
             for (unsigned i = 0; i < 256; i++) {
@@ -142,7 +135,7 @@ void ImageBuffer::transformColorSpace(ColorSpace srcColorSpace, ColorSpace dstCo
             return array;
         }();
         platformTransformColorSpace(linearRgbLUT);
-    } else if (dstColorSpace == ColorSpaceSRGB) {
+    } else if (dstColorSpace == ColorSpace::SRGB) {
         static const std::array<uint8_t, 256> deviceRgbLUT= [] {
             std::array<uint8_t, 256> array;
             for (unsigned i = 0; i < 256; i++) {
@@ -192,11 +185,26 @@ PlatformLayer* ImageBuffer::platformLayer() const
     return 0;
 }
 
-bool ImageBuffer::copyToPlatformTexture(GraphicsContext3D&, GC3Denum, Platform3DObject, GC3Denum, bool, bool)
+bool ImageBuffer::copyToPlatformTexture(GraphicsContextGLOpenGL&, GCGLenum, PlatformGLObject, GCGLenum, bool, bool)
 {
     return false;
 }
 #endif
+
+std::unique_ptr<ImageBuffer> ImageBuffer::copyRectToBuffer(const FloatRect& rect, ColorSpace colorSpace, const GraphicsContext& context)
+{
+    if (rect.isEmpty())
+        return nullptr;
+
+    IntSize scaledSize = ImageBuffer::compatibleBufferSize(rect.size(), context);
+
+    auto buffer = ImageBuffer::createCompatibleBuffer(scaledSize, 1, colorSpace, context);
+    if (!buffer)
+        return nullptr;
+
+    buffer->context().drawImageBuffer(*this, -rect.location());
+    return buffer;
+}
 
 std::unique_ptr<ImageBuffer> ImageBuffer::createCompatibleBuffer(const FloatSize& size, ColorSpace colorSpace, const GraphicsContext& context)
 {
@@ -216,7 +224,11 @@ std::unique_ptr<ImageBuffer> ImageBuffer::createCompatibleBuffer(const FloatSize
 
 std::unique_ptr<ImageBuffer> ImageBuffer::createCompatibleBuffer(const FloatSize& size, float resolutionScale, ColorSpace colorSpace, const GraphicsContext& context)
 {
+#if USE(DIRECT2D)
+    return create(size, context.renderingMode(), &context, resolutionScale, colorSpace);
+#else
     return create(size, context.renderingMode(), resolutionScale, colorSpace);
+#endif
 }
 
 IntSize ImageBuffer::compatibleBufferSize(const FloatSize& size, const GraphicsContext& context)
@@ -224,11 +236,6 @@ IntSize ImageBuffer::compatibleBufferSize(const FloatSize& size, const GraphicsC
     // Enlarge the buffer size if the context's transform is scaling it so we need a higher
     // resolution than one pixel per unit.
     return expandedIntSize(size * context.scaleFactor());
-}
-
-bool ImageBuffer::isCompatibleWithContext(const GraphicsContext& context) const
-{
-    return areEssentiallyEqual(context.scaleFactor(), this->context().scaleFactor());
 }
 
 #if !USE(IOSURFACE_CANVAS_BACKING_STORE)

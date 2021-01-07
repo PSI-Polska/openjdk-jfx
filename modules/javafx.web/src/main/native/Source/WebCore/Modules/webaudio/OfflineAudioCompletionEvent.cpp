@@ -30,8 +30,11 @@
 
 #include "AudioBuffer.h"
 #include "EventNames.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(OfflineAudioCompletionEvent);
 
 Ref<OfflineAudioCompletionEvent> OfflineAudioCompletionEvent::create(RefPtr<AudioBuffer>&& renderedBuffer)
 {
@@ -39,7 +42,7 @@ Ref<OfflineAudioCompletionEvent> OfflineAudioCompletionEvent::create(RefPtr<Audi
 }
 
 OfflineAudioCompletionEvent::OfflineAudioCompletionEvent(RefPtr<AudioBuffer>&& renderedBuffer)
-    : Event(eventNames().completeEvent, true, false)
+    : Event(eventNames().completeEvent, CanBubble::Yes, IsCancelable::No)
     , m_renderedBuffer(WTFMove(renderedBuffer))
 {
 }

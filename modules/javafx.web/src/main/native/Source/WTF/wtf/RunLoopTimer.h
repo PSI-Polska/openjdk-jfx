@@ -26,8 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef RunLoopTimer_h
-#define RunLoopTimer_h
+#pragma once
 
 #include <wtf/SchedulePair.h>
 #include <wtf/Seconds.h>
@@ -39,6 +38,7 @@ namespace WTF {
 
 class WTF_EXPORT_PRIVATE RunLoopTimerBase {
     WTF_MAKE_NONCOPYABLE(RunLoopTimerBase);
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     RunLoopTimerBase() { }
     WTF_EXPORT_PRIVATE virtual ~RunLoopTimerBase();
@@ -46,12 +46,10 @@ public:
     WTF_EXPORT_PRIVATE void schedule(const SchedulePair*);
     WTF_EXPORT_PRIVATE void schedule(const SchedulePairHashSet&);
 
-    WTF_EXPORT_PRIVATE void start(double nextFireInterval, double repeatInterval);
+    WTF_EXPORT_PRIVATE void start(Seconds nextFireInterval, Seconds repeatInterval);
 
-    void startRepeating(double repeatInterval) { start(repeatInterval, repeatInterval); }
-    void startRepeating(Seconds repeatInterval) { start(repeatInterval.value(), repeatInterval.value()); }
-    void startOneShot(double interval) { start(interval, 0); }
-    void startOneShot(Seconds interval) { start(interval.value(), 0); }
+    void startRepeating(Seconds repeatInterval) { start(repeatInterval, repeatInterval); }
+    void startOneShot(Seconds interval) { start(interval, 0_s); }
 
     WTF_EXPORT_PRIVATE void stop();
     bool isActive() const;
@@ -82,5 +80,3 @@ private:
 } // namespace WTF
 
 using WTF::RunLoopTimer;
-
-#endif

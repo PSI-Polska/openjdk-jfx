@@ -39,6 +39,7 @@ namespace WebCore {
 class HTMLProgressElement;
 
 class ProgressShadowElement : public HTMLDivElement {
+    WTF_MAKE_ISO_ALLOCATED(ProgressShadowElement);
 public:
     HTMLProgressElement* progressElement() const;
 
@@ -48,6 +49,9 @@ protected:
 private:
     bool rendererIsNeeded(const RenderStyle&) override;
 };
+
+// The subclasses of ProgressShadowElement share the same isoheap, because they don't add any more
+// fields to the class.
 
 class ProgressInnerElement final : public ProgressShadowElement {
 public:
@@ -59,11 +63,12 @@ private:
     RenderPtr<RenderElement> createElementRenderer(RenderStyle&&, const RenderTreePosition&) override;
     bool rendererIsNeeded(const RenderStyle&) override;
 };
+static_assert(sizeof(ProgressInnerElement) == sizeof(ProgressShadowElement));
 
 inline Ref<ProgressInnerElement> ProgressInnerElement::create(Document& document)
 {
     Ref<ProgressInnerElement> result = adoptRef(*new ProgressInnerElement(document));
-    result->setPseudo(AtomicString("-webkit-progress-inner-element", AtomicString::ConstructFromLiteral));
+    result->setPseudo(AtomString("-webkit-progress-inner-element", AtomString::ConstructFromLiteral));
     return result;
 }
 
@@ -74,11 +79,12 @@ public:
 private:
     ProgressBarElement(Document&);
 };
+static_assert(sizeof(ProgressBarElement) == sizeof(ProgressShadowElement));
 
 inline Ref<ProgressBarElement> ProgressBarElement::create(Document& document)
 {
     Ref<ProgressBarElement> result = adoptRef(*new ProgressBarElement(document));
-    result->setPseudo(AtomicString("-webkit-progress-bar", AtomicString::ConstructFromLiteral));
+    result->setPseudo(AtomString("-webkit-progress-bar", AtomString::ConstructFromLiteral));
     return result;
 }
 
@@ -90,11 +96,12 @@ public:
 private:
     ProgressValueElement(Document&);
 };
+static_assert(sizeof(ProgressValueElement) == sizeof(ProgressShadowElement));
 
 inline Ref<ProgressValueElement> ProgressValueElement::create(Document& document)
 {
     Ref<ProgressValueElement> result = adoptRef(*new ProgressValueElement(document));
-    result->setPseudo(AtomicString("-webkit-progress-value", AtomicString::ConstructFromLiteral));
+    result->setPseudo(AtomString("-webkit-progress-value", AtomString::ConstructFromLiteral));
     return result;
 }
 

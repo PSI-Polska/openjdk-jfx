@@ -50,6 +50,8 @@ public:
     enum class Status { Pending, Fulfilled, Rejected };
     Status status() const;
 
+    static void whenPromiseIsSettled(JSDOMGlobalObject*, JSC::JSObject* promise, Function<void()>&&);
+
 private:
     DOMPromise(JSDOMGlobalObject& globalObject, JSC::JSPromise& promise)
         : DOMGuarded<JSC::JSPromise>(globalObject, promise)

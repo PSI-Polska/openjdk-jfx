@@ -41,8 +41,8 @@ MethodOfGettingAValueProfile MethodOfGettingAValueProfile::fromLazyOperand(
     MethodOfGettingAValueProfile result;
     result.m_kind = LazyOperand;
     result.u.lazyOperand.codeBlock = codeBlock;
-    result.u.lazyOperand.bytecodeOffset = key.bytecodeOffset();
-    result.u.lazyOperand.operand = key.operand().offset();
+    result.u.lazyOperand.bytecodeOffset = key.bytecodeIndex();
+    result.u.lazyOperand.operand = key.operand();
     return result;
 }
 
@@ -57,19 +57,25 @@ void MethodOfGettingAValueProfile::emitReportValue(CCallHelpers& jit, JSValueReg
         return;
 
     case LazyOperand: {
-        LazyOperandValueProfileKey key(u.lazyOperand.bytecodeOffset, VirtualRegister(u.lazyOperand.operand));
+        LazyOperandValueProfileKey key(u.lazyOperand.bytecodeOffset, u.lazyOperand.operand);
 
         ConcurrentJSLocker locker(u.lazyOperand.codeBlock->m_lock);
         LazyOperandValueProfile* profile =
-            u.lazyOperand.codeBlock->lazyOperandValueProfiles().add(locker, key);
+            u.lazyOperand.codeBlock->lazyOperandValueProfiles(locker).add(locker, key);
         jit.storeValue(regs, profile->specFailBucket(0));
         return;
     }
 
-    case ArithProfileReady: {
-        u.arithProfile->emitObserveResult(jit, regs, DoNotHaveTagRegisters);
+    case UnaryArithProfileReady: {
+        u.unaryArithProfile->emitObserveResult(jit, regs, DoNotHaveTagRegisters);
         return;
-    } }
+    }
+
+    case BinaryArithProfileReady: {
+        u.binaryArithProfile->emitObserveResult(jit, regs, DoNotHaveTagRegisters);
+        return;
+    }
+    }
 
     RELEASE_ASSERT_NOT_REACHED();
 }
@@ -85,19 +91,25 @@ void MethodOfGettingAValueProfile::reportValue(JSValue value)
         return;
 
     case LazyOperand: {
-        LazyOperandValueProfileKey key(u.lazyOperand.bytecodeOffset, VirtualRegister(u.lazyOperand.operand));
+        LazyOperandValueProfileKey key(u.lazyOperand.bytecodeOffset, u.lazyOperand.operand);
 
         ConcurrentJSLocker locker(u.lazyOperand.codeBlock->m_lock);
         LazyOperandValueProfile* profile =
-            u.lazyOperand.codeBlock->lazyOperandValueProfiles().add(locker, key);
+            u.lazyOperand.codeBlock->lazyOperandValueProfiles(locker).add(locker, key);
         *profile->specFailBucket(0) = JSValue::encode(value);
         return;
     }
 
-    case ArithProfileReady: {
-        u.arithProfile->observeResult(value);
+    case UnaryArithProfileReady: {
+        u.unaryArithProfile->observeResult(value);
         return;
-    } }
+    }
+
+    case BinaryArithProfileReady: {
+        u.binaryArithProfile->observeResult(value);
+        return;
+    }
+    }
 
     RELEASE_ASSERT_NOT_REACHED();
 }

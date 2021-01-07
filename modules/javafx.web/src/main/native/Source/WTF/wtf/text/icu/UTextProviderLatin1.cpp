@@ -24,10 +24,10 @@
  */
 
 #include "config.h"
-#include "UTextProviderLatin1.h"
+#include <wtf/text/icu/UTextProviderLatin1.h>
 
-#include "UTextProvider.h"
 #include <wtf/text/StringImpl.h>
+#include <wtf/text/icu/UTextProvider.h>
 
 namespace WTF {
 
@@ -173,7 +173,7 @@ static int32_t uTextLatin1Extract(UText* uText, int64_t start, int64_t limit, UC
     if (!length)
         return 0;
 
-    if (destCapacity > 0 && !dest) {
+    if (dest) {
         int32_t trimmedLength = static_cast<int32_t>(length);
         if (trimmedLength > destCapacity)
             trimmedLength = destCapacity;
@@ -182,7 +182,8 @@ static int32_t uTextLatin1Extract(UText* uText, int64_t start, int64_t limit, UC
     }
 
     if (length < destCapacity) {
-        dest[length] = 0;
+        if (dest)
+            dest[length] = 0;
         if (*status == U_STRING_NOT_TERMINATED_WARNING)
             *status = U_ZERO_ERROR;
     } else if (length == destCapacity)

@@ -64,7 +64,9 @@ static void resolveWithTypeAndData(Ref<DeferredPromise>&& promise, FetchBodyCons
         fulfillPromiseWithArrayBuffer(WTFMove(promise), data, length);
         return;
     case FetchBodyConsumer::Type::Blob:
-        promise->resolveWithNewlyCreated<IDLInterface<Blob>>(blobFromData(data, length, contentType).get());
+        promise->resolveCallbackValueWithNewlyCreated<IDLInterface<Blob>>([&data, &length, &contentType](auto&) {
+            return blobFromData(data, length, contentType);
+        });
         return;
     case FetchBodyConsumer::Type::JSON:
         fulfillPromiseWithJSON(WTFMove(promise), textFromUTF8(data, length));
@@ -130,7 +132,9 @@ void FetchBodyConsumer::resolve(Ref<DeferredPromise>&& promise, ReadableStream* 
         fulfillPromiseWithArrayBuffer(WTFMove(promise), takeAsArrayBuffer().get());
         return;
     case Type::Blob:
-        promise->resolveWithNewlyCreated<IDLInterface<Blob>>(takeAsBlob().get());
+        promise->resolveCallbackValueWithNewlyCreated<IDLInterface<Blob>>([this](auto&) {
+            return takeAsBlob();
+        });
         return;
     case Type::JSON:
         fulfillPromiseWithJSON(WTFMove(promise), takeAsText());
@@ -212,15 +216,15 @@ void FetchBodyConsumer::setSource(Ref<FetchBodySource>&& source)
     }
 }
 
-void FetchBodyConsumer::loadingFailed()
+void FetchBodyConsumer::loadingFailed(const Exception& exception)
 {
     m_isLoading = false;
     if (m_consumePromise) {
-        m_consumePromise->reject();
+        m_consumePromise->reject(exception);
         m_consumePromise = nullptr;
     }
     if (m_source) {
-        m_source->error(ASCIILiteral("Loading failed"));
+        m_source->error(exception);
         m_source = nullptr;
     }
 }

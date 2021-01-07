@@ -39,22 +39,30 @@ struct ServiceWorkerFetchResult {
     ServiceWorkerRegistrationKey registrationKey;
     String script;
     ContentSecurityPolicyResponseHeaders contentSecurityPolicy;
+    String referrerPolicy;
     ResourceError scriptError;
+
+    ServiceWorkerFetchResult isolatedCopy() const { return { jobDataIdentifier, registrationKey.isolatedCopy(), script.isolatedCopy(), contentSecurityPolicy.isolatedCopy(), referrerPolicy.isolatedCopy(), scriptError.isolatedCopy() }; }
 
     template<class Encoder> void encode(Encoder&) const;
     template<class Decoder> static bool decode(Decoder&, ServiceWorkerFetchResult&);
 };
 
+inline ServiceWorkerFetchResult serviceWorkerFetchError(ServiceWorkerJobDataIdentifier jobDataIdentifier, ServiceWorkerRegistrationKey&& registrationKey, ResourceError&& error)
+{
+    return { jobDataIdentifier, WTFMove(registrationKey), { }, { }, { }, WTFMove(error) };
+}
+
 template<class Encoder>
 void ServiceWorkerFetchResult::encode(Encoder& encoder) const
 {
-    encoder << jobDataIdentifier << registrationKey << script << contentSecurityPolicy << scriptError;
+    encoder << jobDataIdentifier << registrationKey << script << contentSecurityPolicy << referrerPolicy << scriptError;
 }
 
 template<class Decoder>
 bool ServiceWorkerFetchResult::decode(Decoder& decoder, ServiceWorkerFetchResult& result)
 {
-    std::optional<ServiceWorkerJobDataIdentifier> jobDataIdentifier;
+    Optional<ServiceWorkerJobDataIdentifier> jobDataIdentifier;
     decoder >> jobDataIdentifier;
     if (!jobDataIdentifier)
         return false;
@@ -68,6 +76,8 @@ bool ServiceWorkerFetchResult::decode(Decoder& decoder, ServiceWorkerFetchResult
     if (!decoder.decode(result.script))
         return false;
     if (!decoder.decode(result.contentSecurityPolicy))
+        return false;
+    if (!decoder.decode(result.referrerPolicy))
         return false;
     if (!decoder.decode(result.scriptError))
         return false;

@@ -21,28 +21,33 @@
 #pragma once
 
 #include "DOMMimeType.h"
-#include "DOMWindowProperty.h"
+#include "Navigator.h"
 #include "ScriptWrappable.h"
 #include <wtf/RefCounted.h>
 
 namespace WebCore {
 
-class Frame;
 class PluginData;
 
-class DOMMimeTypeArray : public ScriptWrappable, public RefCounted<DOMMimeTypeArray>, public DOMWindowProperty {
+class DOMMimeTypeArray final : public ScriptWrappable, public RefCounted<DOMMimeTypeArray> {
+    WTF_MAKE_ISO_ALLOCATED(DOMMimeTypeArray);
 public:
-    static Ref<DOMMimeTypeArray> create(Frame* frame) { return adoptRef(*new DOMMimeTypeArray(frame)); }
+    static Ref<DOMMimeTypeArray> create(Navigator& navigator) { return adoptRef(*new DOMMimeTypeArray(navigator)); }
     ~DOMMimeTypeArray();
 
     unsigned length() const;
     RefPtr<DOMMimeType> item(unsigned index);
-    RefPtr<DOMMimeType> namedItem(const AtomicString& propertyName);
-    Vector<AtomicString> supportedPropertyNames();
+    RefPtr<DOMMimeType> namedItem(const AtomString& propertyName);
+    Vector<AtomString> supportedPropertyNames();
+
+    Navigator* navigator() { return m_navigator.get(); }
 
 private:
-    explicit DOMMimeTypeArray(Frame*);
+    explicit DOMMimeTypeArray(Navigator&);
     PluginData* getPluginData() const;
+    Frame* frame() const { return m_navigator ? m_navigator->frame() : nullptr; }
+
+    WeakPtr<Navigator> m_navigator;
 };
 
 } // namespace WebCore

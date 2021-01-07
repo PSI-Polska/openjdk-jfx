@@ -26,6 +26,10 @@
 #include "ContainerNode.h"
 #include <wtf/MainThread.h>
 
+#if PLATFORM(IOS_FAMILY)
+#include "WebCoreThread.h"
+#endif
+
 namespace WebCore {
 
 class ScriptDisallowedScope {
@@ -49,6 +53,11 @@ public:
             return;
         ASSERT(s_count);
         s_count--;
+    }
+
+    ScriptDisallowedScope& operator=(const ScriptDisallowedScope&)
+    {
+        return *this;
     }
 
     static bool isEventAllowedInMainThread()
@@ -75,7 +84,7 @@ public:
         // Release asserts in canExecuteScript should be sufficient for security defense purposes.
         static bool isEventDispatchAllowedInSubtree(Node& node)
         {
-#if !ASSERT_DISABLED || ENABLE(SECURITY_ASSERTIONS)
+#if ASSERT_ENABLED || ENABLE(SECURITY_ASSERTIONS)
             return isScriptAllowed() || EventAllowedScope::isAllowedNode(node);
 #else
             UNUSED_PARAM(node);
@@ -83,14 +92,24 @@ public:
 #endif
         }
 
+        static bool hasDisallowedScope()
+        {
+            ASSERT(isMainThread());
+            return s_count;
+        }
+
         static bool isScriptAllowed()
         {
             ASSERT(isMainThread());
+#if PLATFORM(IOS_FAMILY)
+            return !s_count || webThreadDelegateMessageScopeCount;
+#else
             return !s_count;
+#endif
         }
     };
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     class EventAllowedScope {
     public:
         explicit EventAllowedScope(ContainerNode& userAgentContentRoot)
@@ -121,15 +140,16 @@ public:
         EventAllowedScope* m_previousScope;
         static EventAllowedScope* s_currentScope;
     };
-#else
+#else // not ASSERT_ENABLED
     class EventAllowedScope {
     public:
         explicit EventAllowedScope(ContainerNode&) { }
         static bool isAllowedNode(Node&) { return true; }
     };
-#endif
+#endif // not ASSERT_ENABLED
 
-    // FIXME: Remove this class once the sync layout inside SVGImage::draw is removed
+    // FIXME: Remove this class once the sync layout inside SVGImage::draw is removed,
+    // CachedSVGFont::ensureCustomFontData no longer synchronously creates a document during style resolution,
     // and refactored the code in RenderFrameBase::performLayoutWithFlattening.
     class DisableAssertionsInScope {
     public:
@@ -145,25 +165,6 @@ public:
         }
     private:
         unsigned m_originalCount { 0 };
-    };
-
-    // FIXME: Remove all uses of this class.
-    class LayoutAssertionDisableScope {
-    public:
-        LayoutAssertionDisableScope()
-        {
-            s_layoutAssertionDisableCount++;
-        }
-
-        ~LayoutAssertionDisableScope()
-        {
-            s_layoutAssertionDisableCount--;
-        }
-
-        static bool shouldDisable() { return s_layoutAssertionDisableCount; }
-
-    private:
-        static unsigned s_layoutAssertionDisableCount;
     };
 
 private:

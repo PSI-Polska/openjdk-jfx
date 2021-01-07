@@ -103,6 +103,8 @@ public:
         return offsetForPositionAfterAnchor();
     }
 
+    RefPtr<Node> firstNode() const;
+
     // These are convenience methods which are smart about whether the position is neighbor anchored or parent anchored
     Node* computeNodeBeforePosition() const;
     Node* computeNodeAfterPosition() const;
@@ -115,6 +117,7 @@ public:
     Node* deprecatedNode() const { return m_anchorNode.get(); }
 
     Document* document() const { return m_anchorNode ? &m_anchorNode->document() : nullptr; }
+    TreeScope* treeScope() const { return m_anchorNode ? &m_anchorNode->treeScope() : nullptr; }
     Element* rootEditableElement() const
     {
         Node* container = containerNode();
@@ -260,17 +263,8 @@ inline bool operator<=(const Position& a, const Position& b)
     return !a.isNull() && !b.isNull() && (a == b || a < b);
 }
 
-inline Position positionInParentBeforeNode(const Node* node)
-{
-    ASSERT(node->parentNode());
-    return Position(node->parentNode(), node->computeNodeIndex(), Position::PositionIsOffsetInAnchor);
-}
-
-inline Position positionInParentAfterNode(const Node* node)
-{
-    ASSERT(node->parentNode());
-    return Position(node->parentNode(), node->computeNodeIndex() + 1, Position::PositionIsOffsetInAnchor);
-}
+Position positionInParentBeforeNode(Node*);
+Position positionInParentAfterNode(Node*);
 
 // positionBeforeNode and positionAfterNode return neighbor-anchored positions, construction is O(1)
 inline Position positionBeforeNode(Node* anchorNode)
@@ -287,7 +281,7 @@ inline Position positionAfterNode(Node* anchorNode)
 
 inline int lastOffsetInNode(Node* node)
 {
-    return node->offsetInCharacters() ? node->maxCharacterOffset() : static_cast<int>(node->countChildNodes());
+    return node->isCharacterDataNode() ? node->maxCharacterOffset() : static_cast<int>(node->countChildNodes());
 }
 
 // firstPositionInNode and lastPositionInNode return parent-anchored positions, lastPositionInNode construction is O(n) due to countChildNodes()
@@ -307,7 +301,7 @@ inline Position lastPositionInNode(Node* anchorNode)
 
 inline int minOffsetForNode(Node* anchorNode, int offset)
 {
-    if (anchorNode->offsetInCharacters())
+    if (anchorNode->isCharacterDataNode())
         return std::min(offset, anchorNode->maxCharacterOffset());
 
     int newOffset = 0;
@@ -319,7 +313,7 @@ inline int minOffsetForNode(Node* anchorNode, int offset)
 
 inline bool offsetIsBeforeLastNodeOffset(int offset, Node* anchorNode)
 {
-    if (anchorNode->offsetInCharacters())
+    if (anchorNode->isCharacterDataNode())
         return offset < anchorNode->maxCharacterOffset();
 
     int currentOffset = 0;
@@ -329,6 +323,8 @@ inline bool offsetIsBeforeLastNodeOffset(int offset, Node* anchorNode)
 
     return offset < currentOffset;
 }
+
+RefPtr<Node> commonShadowIncludingAncestor(const Position&, const Position&);
 
 WTF::TextStream& operator<<(WTF::TextStream&, const Position&);
 

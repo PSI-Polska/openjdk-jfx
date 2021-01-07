@@ -11,7 +11,7 @@ revert
 // CSS_PROP_BORDER_TOP_STYLE
 // CSS_PROP_BORDER_BOTTOM_STYLE
 // CSS_PROP_BORDER_LEFT_STYLE
-// The order here must match the order of the EBorderStyle enum in RenderStyleConstants.h.
+// The order here must match the order of the BorderStyle enum in RenderStyleConstants.h.
 none
 hidden
 inset
@@ -35,7 +35,7 @@ small-caption
 -webkit-small-control
 -webkit-control
 
-#if defined(WTF_PLATFORM_IOS) && WTF_PLATFORM_IOS
+#if defined(WTF_PLATFORM_IOS_FAMILY) && WTF_PLATFORM_IOS_FAMILY
 -apple-system-headline
 -apple-system-body
 -apple-system-subheadline
@@ -222,6 +222,26 @@ threedshadow
 window
 windowframe
 windowtext
+#if (defined(WTF_PLATFORM_MAC) && WTF_PLATFORM_MAC) || (defined(WTF_PLATFORM_IOS_FAMILY) && WTF_PLATFORM_IOS_FAMILY)
+-apple-system-header-text
+-apple-system-text-background
+-apple-system-control-background
+-apple-system-placeholder-text
+-apple-system-label
+-apple-system-secondary-label
+-apple-system-tertiary-label
+-apple-system-quaternary-label
+-apple-system-grid
+-apple-system-separator
+-apple-system-container-border
+-apple-system-background
+-apple-system-secondary-background
+-apple-system-tertiary-background
+-apple-system-grouped-background
+-apple-system-secondary-grouped-background
+-apple-system-tertiary-grouped-background
+-apple-system-selected-content-background
+-apple-system-unemphasized-selected-content-background
 -apple-wireless-playback-target-active
 -apple-system-blue
 -apple-system-brown
@@ -232,6 +252,25 @@ windowtext
 -apple-system-purple
 -apple-system-red
 -apple-system-yellow
+#endif
+#if defined(WTF_PLATFORM_MAC) && WTF_PLATFORM_MAC
+-apple-system-alternate-selected-text
+-apple-system-control-accent
+-apple-system-even-alternating-content-background
+-apple-system-odd-alternating-content-background
+-apple-system-selected-text
+-apple-system-unemphasized-selected-text
+-apple-system-selected-text-background
+-apple-system-unemphasized-selected-text-background
+-apple-system-find-highlight-background
+#endif
+#if defined(WTF_PLATFORM_IOS_FAMILY) && WTF_PLATFORM_IOS_FAMILY
+-apple-system-indigo
+-apple-system-teal
+#endif
+#if defined(HAVE_OS_DARK_MODE_SUPPORT) && HAVE_OS_DARK_MODE_SUPPORT
+-webkit-control-background
+#endif
 -webkit-focus-ring-color
 currentcolor
 //
@@ -279,7 +318,7 @@ bottom
 -webkit-baseline-middle
 //
 // CSS_PROP_TEXT_ALIGN:
-// The order here must match the order of the ETextAlign enum in RenderStyleConstants.h.
+// The order here must match the order of the TextAlignMode enum in RenderStyleConstants.h.
 //
 -webkit-auto
 left
@@ -304,7 +343,7 @@ outside
 inside
 //
 // CSS_PROP_LIST_STYLE_TYPE:
-// The order here must match the order of the EListStyleType enum in RenderStyleConstants.h.
+// The order here must match the order of the ListStyleType enum in RenderStyleConstants.h.
 //
 disc
 circle
@@ -389,12 +428,11 @@ katakana-iroha
 //none
 //
 // CSS_PROP_DISPLAY:
-// The order here must match the order of the EDisplay enum in RenderStyleConstants.h.
+// The order here must match the order of the DisplayType enum in RenderStyleConstants.h.
 //
 inline
 block
 list-item
-compact
 inline-block
 table
 inline-table
@@ -415,10 +453,11 @@ inline-flex
 contents
 grid
 inline-grid
+flow-root
 //none
 //
 // CSS_PROP_CURSOR:
-// The order here must match the order of the ECursor enum in RenderStyleConstants.h.
+// The order here must match the order of the CursorType enum in RenderStyleConstants.h.
 //
 auto
 default
@@ -527,7 +566,6 @@ no-close-quote
 no-open-quote
 nowrap
 open-quote
-overlay
 overline
 portrait
 pre
@@ -734,6 +772,11 @@ keep-all
 break-word
 
 //
+// CSS_PROP_WHITE_SPACE
+//
+break-spaces
+
+//
 // CSS_PROP__KHTML_NBSP_MODE
 //
 space
@@ -746,6 +789,7 @@ loose
 // normal
 strict
 after-white-space
+anywhere
 
 // -webkit-appearance
 // The order here must match the order in the ControlPart enum in ThemeTypes.h.
@@ -813,6 +857,12 @@ image-controls-button
 #if defined(ENABLE_APPLE_PAY) && ENABLE_APPLE_PAY
 -apple-pay-button
 #endif
+#if defined(ENABLE_INPUT_TYPE_COLOR) && ENABLE_INPUT_TYPE_COLOR
+color-well
+#endif
+#if defined(ENABLE_DATALIST_ELEMENT) && ENABLE_DATALIST_ELEMENT
+list-button
+#endif
 textarea
 #if defined(ENABLE_ATTACHMENT_ELEMENT) && ENABLE_ATTACHMENT_ELEMENT
 attachment
@@ -865,6 +915,7 @@ verso
 margin-box
 
 // clip-path
+stroke-box
 view-box
 
 //
@@ -961,6 +1012,7 @@ visibleStroke
 painted
 fill
 stroke
+bounding-box
 //all
 //none
 
@@ -1002,7 +1054,7 @@ manual
 -webkit-letterpress
 #endif
 
-#if defined(ENABLE_ACCELERATED_OVERFLOW_SCROLLING) && ENABLE_ACCELERATED_OVERFLOW_SCROLLING
+#if defined(ENABLE_OVERFLOW_SCROLLING_TOUCH) && ENABLE_OVERFLOW_SCROLLING_TOUCH
 // -webkit-overflow-scrolling
 // auto
 touch
@@ -1106,6 +1158,7 @@ edges
 alphabetic
 
 // position
+sticky
 -webkit-sticky
 
 // (pointer:) media feature
@@ -1122,7 +1175,7 @@ on-demand
 // normal
 multiply
 screen
-// overlay
+overlay
 darken
 lighten
 color-dodge
@@ -1170,7 +1223,9 @@ repeating-conic-gradient
 -webkit-named-image
 filter
 -webkit-filter
-dashboard-region
+#if defined(ENABLE_CSS_PAINTING_API) && ENABLE_CSS_PAINTING_API
+paint
+#endif
 
 // deprecated gradients
 from
@@ -1207,7 +1262,7 @@ url
 cubic-bezier
 spring
 steps
-frames
+apple-invert-lightness
 
 // colors
 rgb
@@ -1242,6 +1297,8 @@ translate3d
 // transform-box
 // border-box
 // view-box
+// stroke-box
+// content-box
 fill-box
 
 // motion path
@@ -1251,9 +1308,11 @@ calc
 -webkit-calc
 min
 max
+clamp
+
+from-image
 
 #if defined(ENABLE_CSS_IMAGE_RESOLUTION) && ENABLE_CSS_IMAGE_RESOLUTION
-from-image
 snap
 #endif
 
@@ -1304,6 +1363,11 @@ plain
 buy
 set-up
 donate
+#if defined(ENABLE_APPLE_PAY_SESSION_V4) && ENABLE_APPLE_PAY_SESSION_V4
+check-out
+book
+subscribe
+#endif
 #endif
 
 // font-synthesis
@@ -1314,10 +1378,19 @@ style
 scroll-position
 //contents
 
-#if defined(ENABLE_TOUCH_EVENTS) && ENABLE_TOUCH_EVENTS
+#if defined(ENABLE_POINTER_EVENTS) && ENABLE_POINTER_EVENTS
 // touch-action
+// auto
+// none
 manipulation
+pan-x
+pan-y
+pinch-zoom
 #endif
+
+// scroll-behavior
+// auto
+smooth
 
 // hanging-punctuation
 allow-end
@@ -1333,9 +1406,25 @@ rec2020
 sRGB
 display-p3
 
+// prefers-default-appearance
+prefers
+// no-preference
+
 // prefers-reduced-motion
 reduce
 no-preference
+
+#if defined(ENABLE_DARK_MODE_CSS) && ENABLE_DARK_MODE_CSS
+// prefers-color-scheme
+light
+dark
+// no-preference
+
+// color-scheme
+only
+// light
+// dark
+#endif
 
 // auto-repeat
 auto-fill
@@ -1354,3 +1443,10 @@ standalone
 minimal-ui
 browser
 #endif
+
+// text-decoration-thickness, text-underline-offset
+from-font
+
+// dynamic-range
+standard
+high

@@ -25,9 +25,11 @@
 
 #pragma once
 
+#include "DocumentFragment.h"
 #include "Frame.h"
 #include "Pasteboard.h"
 #include "Range.h"
+#include "markup.h"
 
 namespace WebCore {
 
@@ -45,6 +47,7 @@ public:
 
 protected:
     bool shouldSanitize() const;
+    MSOListQuirks msoListQuirksForMarkup() const;
 };
 
 class WebContentReader final : public FrameWebContentReader {
@@ -63,20 +66,21 @@ public:
     {
     }
 
-    DocumentFragment& ensureFragment();
     void addFragment(Ref<DocumentFragment>&&);
 
 private:
 #if PLATFORM(COCOA)
     bool readWebArchive(SharedBuffer&) override;
+    bool readFilePath(const String&, PresentationSize preferredPresentationSize = { }, const String& contentType = { }) override;
     bool readFilePaths(const Vector<String>&) override;
     bool readHTML(const String&) override;
     bool readRTFD(SharedBuffer&) override;
     bool readRTF(SharedBuffer&) override;
-    bool readImage(Ref<SharedBuffer>&&, const String& type) override;
+    bool readImage(Ref<SharedBuffer>&&, const String& type, PresentationSize preferredPresentationSize = { }) override;
     bool readURL(const URL&, const String& title) override;
-#endif
+    bool readDataBuffer(SharedBuffer&, const String& type, const String& name, PresentationSize preferredPresentationSize = { }) override;
     bool readPlainText(const String&) override;
+#endif
 };
 
 class WebContentMarkupReader final : public FrameWebContentReader {
@@ -91,14 +95,16 @@ public:
 private:
 #if PLATFORM(COCOA)
     bool readWebArchive(SharedBuffer&) override;
+    bool readFilePath(const String&, PresentationSize = { }, const String& = { }) override { return false; }
     bool readFilePaths(const Vector<String>&) override { return false; }
     bool readHTML(const String&) override;
     bool readRTFD(SharedBuffer&) override;
     bool readRTF(SharedBuffer&) override;
-    bool readImage(Ref<SharedBuffer>&&, const String&) override { return false; }
+    bool readImage(Ref<SharedBuffer>&&, const String&, PresentationSize = { }) override { return false; }
     bool readURL(const URL&, const String&) override { return false; }
-#endif
+    bool readDataBuffer(SharedBuffer&, const String&, const String&, PresentationSize = { }) override { return false; }
     bool readPlainText(const String&) override { return false; }
+#endif
 };
 
 #if PLATFORM(COCOA) && defined(__OBJC__)
