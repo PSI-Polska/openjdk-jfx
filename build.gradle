@@ -1627,9 +1627,9 @@ void addMavenPublication(Project project, List<String> projectDependencies) {
                         artifact project.tasks."modularPublicationJar$t.capital" {
                             classifier "$t.name"
                         }
+                        artifact project.tasks."modularSourcesPublicationJar$t.capital"
+                        artifact project.tasks."modularJavadocPublicationJar$t.capital"
                     }
-                    artifact project.tasks."modularSourcesPublicationJar$t.capital"
-                    artifact project.tasks."modularJavadocPublicationJar$t.capital"
 
                     pom.withXml {
                         Node parent = asNode().appendNode("parent")
