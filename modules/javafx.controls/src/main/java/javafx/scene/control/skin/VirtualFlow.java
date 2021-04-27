@@ -2634,6 +2634,7 @@ public class VirtualFlow<T extends IndexedCell> extends Region {
      */
     private void releaseCell(T cell) {
         if (accumCell != null && cell == accumCell) {
+            accumCell.setVisible(false);
             accumCell.updateIndex(-1);
         }
     }
